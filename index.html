@@ -1,0 +1,2133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>板材开料排版 · Nesting Planner</title>
+<style>
+:root{
+  --bg:#f1f3f6; --panel:#ffffff; --ink:#1f2937; --muted:#6b7280;
+  --line:#dde3ea; --line2:#e7ebf0; --brand:#1d4ed8; --brand-bg:#eff4ff;
+  --ok:#15803d; --ok-bg:#ecfdf3; --warn:#b45309; --warn-bg:#fffbeb;
+  --bad:#b91c1c; --bad-bg:#fef2f2; --lock:#7c3aed;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+  font-size:13px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+.muted{color:var(--muted)}
+.row{display:flex;align-items:center;gap:8px}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+
+/* ---------- 顶栏 ---------- */
+header.topbar{background:#0f172a;color:#e2e8f0;padding:0 14px;height:52px;display:flex;align-items:center;gap:14px;flex:none}
+header.topbar .logo{font-weight:700;font-size:15px;letter-spacing:.5px;white-space:nowrap}
+header.topbar .logo small{color:#94a3b8;font-weight:400;margin-left:8px}
+.seg{display:flex;background:#1e293b;border-radius:8px;padding:2px;gap:2px}
+.seg button{background:transparent;border:0;color:#94a3b8;padding:5px 14px;border-radius:6px;font-weight:600}
+.seg button.active{background:#3b82f6;color:#fff}
+.seg button:hover:not(.active){color:#e2e8f0}
+.btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 12px;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.btn:hover{border-color:#9db4d6;background:#f8fafc}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.primary:hover{background:#1e40af}
+.btn.danger{color:var(--bad);border-color:#f3c2c2}
+.btn.danger:hover{background:var(--bad-bg)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:#f1f5f9}
+.btn.sm{padding:3px 8px;font-size:12px;border-radius:6px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+header.topbar .btn{background:#1e293b;border-color:#334155;color:#e2e8f0}
+header.topbar .btn:hover{background:#334155}
+header.topbar .btn.primary{background:#3b82f6;border-color:#3b82f6}
+
+/* ---------- 布局 ---------- */
+.layout{flex:1;display:flex;min-height:0}
+aside{width:300px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+
+.tabs{display:flex;border-bottom:1px solid var(--line);flex:none}
+.tabs button{border:0;background:none;padding:11px 16px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button.active{color:var(--brand);border-bottom-color:var(--brand)}
+.tabpane{display:none;flex:1;overflow:auto;min-height:0;padding:12px}
+.tabpane.active{display:block}
+
+/* ---------- 列表/表单 ---------- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);margin-bottom:10px}
+.card>h3{margin:0;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:8px}
+.card .body{padding:10px 12px}
+.list-item{border:1px solid var(--line2);border-radius:8px;padding:8px 10px;margin-bottom:7px}
+.list-item:last-child{margin-bottom:0}
+.li-title{font-weight:600;display:flex;align-items:center;gap:6px}
+.li-meta{font-size:11.5px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.li-actions{margin-top:7px;display:flex;gap:6px}
+.grain-dot{width:9px;height:9px;border-radius:2px;flex:none}
+.grain-long{background:#2563eb}
+.grain-cross{background:#0891b2}
+.grain-none{background:#9ca3af}
+.grain-fixed{background:#dc2626}
+.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;background:#f1f5f9;border:1px solid var(--line2);color:#475569}
+.tag.batch{background:#f5f3ff;border-color:#ddd6fe;color:#6d28d9}
+.tag.rem{background:var(--warn-bg);border-color:#fde68a;color:#92400e}
+.tag.inuse{background:var(--ok-bg);border-color:#bbf7d0;color:#166534}
+
+table.grid{width:100%;border-collapse:collapse;font-size:12px}
+table.grid th{text-align:left;color:var(--muted);font-weight:600;padding:5px 6px;border-bottom:1px solid var(--line)}
+table.grid td{padding:5px 6px;border-bottom:1px solid var(--line2);vertical-align:middle}
+table.grid tr:hover td{background:#f8fafc}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+input[type=number],input[type=text],select{border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:#fff;width:100%}
+input[type=number]:focus,input[type=text]:focus,select:focus{outline:2px solid #bfdbfe;border-color:#3b82f6}
+label.fld{display:block;font-size:11.5px;color:var(--muted);margin-bottom:7px}
+label.fld input,label.fld select{margin-top:3px}
+.flds2{display:grid;grid-template-columns:1fr 1fr;gap:0 9px}
+.modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:50}
+.modal-mask.show{display:flex}
+.modal{background:#fff;border-radius:12px;width:430px;max-width:94vw;max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.modal h3{margin:0;padding:14px 16px;border-bottom:1px solid var(--line2)}
+.modal .mbody{padding:14px 16px}
+.modal .mfoot{padding:11px 16px;border-top:1px solid var(--line2);display:flex;gap:8px;justify-content:flex-end}
+.switch{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.switch input{width:auto}
+
+/* ---------- 主工作区 ---------- */
+.toolbar{flex:none;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.canvas-scroll{flex:1;overflow:auto;padding:14px;background:var(--bg)}
+.boards-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+
+.board-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px 12px 12px}
+.board-card.locked{border-color:#c4b5fd;background:#fdfcff}
+.bc-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;max-width:640px}
+.bc-head .bname{font-weight:700}
+.bc-head .bspec{font-size:11.5px;color:var(--muted)}
+.bc-stat{font-size:11.5px;display:flex;gap:10px;flex-wrap:wrap;margin-top:3px}
+.bc-stat b{font-variant-numeric:tabular-nums}
+.util-bar{height:5px;border-radius:99px;background:#eef2f7;margin-top:7px;overflow:hidden}
+.util-bar i{display:block;height:100%;background:linear-gradient(90deg,#60a5fa,#2563eb)}
+.util-bar.warn i{background:linear-gradient(90deg,#fbbf24,#d97706)}
+.board-stage{margin-top:9px;position:relative}
+.board-svg{display:block;background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px}
+.part-rect{cursor:grab;transition:stroke-width .08s}
+.part-rect:active{cursor:grabbing}
+.part-rect.selected{stroke:#f59e0b!important;stroke-width:2.5!important}
+.part-rect.rotatable:hover{filter:brightness(1.03)}
+.bedge{stroke:#334155;stroke-width:2.2;fill:none}
+.part-label{font-size:9.5px;fill:#1e293b;pointer-events:none;font-weight:600}
+.part-dim{font-size:8px;fill:#475569;pointer-events:none}
+.ghost-text{font-size:9px;fill:#64748b;pointer-events:none}
+.bc-issue{margin-top:8px;border-radius:7px;padding:6px 9px;font-size:11.5px;background:var(--bad-bg);color:var(--bad);border:1px solid #fecaca;display:none}
+.bc-issue.show{display:block}
+.bc-issue .one{display:block;margin-top:2px}
+.lock-badge{background:#f3e8ff;color:var(--lock);border:1px solid #ddd6fe}
+.drag-ghost{position:fixed;z-index:99;pointer-events:none;opacity:.85;display:none}
+.drag-ghost .gtxt{background:#0f172a;color:#fff;border-radius:6px;padding:3px 8px;font-size:11px;white-space:nowrap}
+.drop-hint{outline:2px dashed #3b82f6;outline-offset:2px;border-radius:6px}
+
+/* 待排区 */
+.tray{background:var(--panel);border-top:1px solid var(--line);flex:none;padding:9px 14px}
+.tray h4{margin:0 0 7px;font-size:12px;display:flex;align-items:center;gap:8px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1.5px dashed #94a3b8;border-radius:8px;padding:5px 9px;background:#f8fafc;cursor:grab;font-size:11.5px;display:flex;align-items:center;gap:6px;user-select:none}
+.chip:hover{border-color:var(--brand);background:var(--brand-bg)}
+.chip .qty{background:#e2e8f0;border-radius:99px;padding:0 7px;font-size:11px;font-weight:700}
+.chip.rem-cand{border-style:solid;border-color:#f59e0b;background:#fffbeb}
+
+/* 统计条 */
+.statline{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px}
+.statline .stat b{font-size:15px;font-variant-numeric:tabular-nums}
+
+/* 对比 */
+.cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cmp-card{border-radius:12px;border:2px solid var(--line);overflow:hidden;background:#fff}
+.cmp-card.win{border-color:#22c55e}
+.cmp-card h3{margin:0;padding:11px 14px;background:#f8fafc;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:8px}
+.win-tag{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+.cmp-row{display:flex;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--line2)}
+.cmp-row.good{background:#f0fdf4;color:#166534;font-weight:600}
+.cmp-row.bad{background:#fef2f2;color:#991b1b}
+
+/* 余料 */
+.rem-card{border-left:4px solid #f59e0b}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#0f172a;color:#fff;padding:9px 18px;border-radius:9px;font-size:13px;opacity:0;transition:.25s;z-index:100;pointer-events:none;max-width:80vw}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:#991b1b}
+.empty-tip{text-align:center;color:var(--muted);padding:50px 20px;font-size:13px}
+.foot-note{color:var(--muted);font-size:11px;padding:8px 2px}
+@media print{
+  header.topbar,aside,.toolbar,.tray,.tabs,.bc-actions,.no-print{display:none!important}
+  body{overflow:visible;background:#fff}
+  main{overflow:visible}
+  .canvas-scroll{overflow:visible;padding:0}
+  .board-card{break-inside:avoid;box-shadow:none}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="logo">🪚 板材开料排版<small>纹路 · 批次 · 余料 · 双方案对比</small></div>
+  <div class="seg" id="planSeg">
+    <button data-plan="A" class="active">方案 A</button>
+    <button data-plan="B">方案 B</button>
+  </div>
+  <span class="spacer"></span>
+  <button class="btn" id="btnCompare" title="对比 A / B 两版的用料和余料">⚖ 两版对比</button>
+  <button class="btn primary" id="btnExport">📄 导出开料单</button>
+  <button class="btn" id="btnPrint">🖨 打印</button>
+  <button class="btn" id="btnReset" title="清空并恢复示例数据">↺ 重置示例</button>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="tabs" id="sideTabs">
+      <button data-tab="parts" class="active">板件</button>
+      <button data-tab="sheets">板材</button>
+      <button data-tab="remnants">余料库</button>
+      <button data-tab="settings">规则</button>
+    </div>
+
+    <!-- 板件 -->
+    <div class="tabpane active" id="tab-parts">
+      <div class="row" style="margin-bottom:9px">
+        <button class="btn primary sm" id="btnAddPart">＋ 新增板件</button>
+        <button class="btn sm" id="btnAuto" title="按默认规则自动排版（锁定的板不会被改动）">⚡ 自动重排</button>
+        <span class="spacer"></span>
+        <span class="muted" id="partCount"></span>
+      </div>
+      <div id="partList"></div>
+      <div class="foot-note">纹路：<span class="grain-dot grain-long"></span>顺纹长向　
+        <span class="grain-dot grain-cross"></span>顺纹短向　
+        <span class="grain-dot grain-none"></span>无要求　
+        <span class="grain-dot grain-fixed"></span>禁转（尺寸已定死）</div>
+    </div>
+
+    <!-- 板材 -->
+    <div class="tabpane" id="tab-sheets">
+      <div class="row" style="margin-bottom:9px">
+        <button class="btn primary sm" id="btnAddStock">＋ 新增板材规格</button>
+        <span class="spacer"></span>
+      </div>
+      <div id="stockList"></div>
+      <div class="foot-note">自动排版时优先用余料，其次从库存板材里挑同批次、同材质、最小够放的一张。</div>
+    </div>
+
+    <!-- 余料库 -->
+    <div class="tabpane" id="tab-remnants">
+      <div class="row" style="margin-bottom:9px">
+        <button class="btn primary sm" id="btnAddRemnant">＋ 登记余料</button>
+        <span class="spacer"></span>
+      </div>
+      <div id="remnantList"></div>
+      <div class="foot-note">每张已排板上的大块余料可点「收入余料库」，后续订单优先提示使用；余料是否值得留要看后续订单，利用率只是参考。</div>
+    </div>
+
+    <!-- 规则 -->
+    <div class="tabpane" id="tab-settings">
+      <div class="card">
+        <h3>开料参数</h3>
+        <div class="body">
+          <div class="flds2">
+            <label class="fld">锯缝 / 刀径 (mm)<input type="number" id="setKerf" min="0" step="0.5"></label>
+            <label class="fld">最小余料宽 (mm)<input type="number" id="setMinRem" min="0" step="10"></label>
+          </div>
+          <div class="flds2">
+            <label class="fld">板材默认纹路
+              <select id="setGrain">
+                <option value="long">顺纹沿长向</option>
+                <option value="cross">顺纹沿短向</option>
+                <option value="none">素板（无纹路）</option>
+              </select>
+            </label>
+            <label class="fld">自动排版策略
+              <select id="setStrategy">
+                <option value="bss">最短边适配（推荐）</option>
+                <option value="baf">底部适配</option>
+              </select>
+            </label>
+          </div>
+          <label class="switch"><input type="checkbox" id="setAutoRecalc"> 改板件尺寸后自动重排未锁定的板</label>
+        </div>
+      </div>
+      <div class="card">
+        <h3>纹路与批次规则</h3>
+        <div class="body muted" style="font-size:12px;line-height:1.7">
+          · 顺纹板件的长边必须对准板材纹路方向；禁转件两个方向都不允许旋转。<br>
+          · 批次（颜色批号）不同的板件与板材禁止混用，同纹路要求的板件自动优先聚在一张板。<br>
+          · 拖动后即时检查：越界、重叠、纹路不符当场红框标出。<br>
+          · 锁定板：自动重排、尺寸联动都不会改动它，上面的板件也不能拖动。
+        </div>
+      </div>
+      <div class="card">
+        <h3>数据</h3>
+        <div class="body row">
+          <button class="btn sm" id="btnExportJson">导出数据(JSON)</button>
+          <button class="btn sm" id="btnImportJson">导入数据(JSON)</button>
+          <input type="file" id="importFile" accept=".json" style="display:none">
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="toolbar no-print">
+      <button class="btn sm" id="btnAddBoard">＋ 手动加一张板</button>
+      <button class="btn sm" id="btnClearLayout">清空本版排布</button>
+      <span class="spacer"></span>
+      <div class="statline" id="statLine"></div>
+    </div>
+    <div class="canvas-scroll">
+      <div class="boards-wrap" id="boardsWrap"></div>
+      <div class="empty-tip" id="emptyTip" style="display:none">还没有板。点左上「⚡ 自动重排」，或「＋ 手动加一张板」后把下方板件拖上去。</div>
+    </div>
+
+    <!-- 待排板件 -->
+    <div class="tray no-print">
+      <h4>📥 待排板件（拖到板上；点击可旋转后拖出）
+        <span class="spacer" style="flex:1"></span>
+        <span class="muted" id="trayHint"></span>
+      </h4>
+      <div class="chips" id="trayChips"></div>
+    </div>
+  </main>
+</div>
+
+<!-- 板件弹窗 -->
+<div class="modal-mask" id="partModal">
+  <div class="modal">
+    <h3 id="partModalTitle">新增板件</h3>
+    <div class="mbody">
+      <input type="hidden" id="pfId">
+      <label class="fld">名称 / 编号<input type="text" id="pfName" placeholder="如：左侧板 L-600"></label>
+      <div class="flds2">
+        <label class="fld">长 L (mm)<input type="number" id="pfL" min="1" step="1"></label>
+        <label class="fld">宽 W (mm)<input type="number" id="pfW" min="1" step="1"></label>
+        <label class="fld">数量<input type="number" id="pfQty" min="1" step="1" value="1"></label>
+        <label class="fld">厚度 (mm)<input type="number" id="pfThick" min="1" step="1" value="18"></label>
+      </div>
+      <div class="flds2">
+        <label class="fld">材质颜色
+          <select id="pfMaterial"></select>
+        </label>
+        <label class="fld">批次/色号<input type="text" id="pfBatch" placeholder="如 202609-A"></label>
+      </div>
+      <div class="flds2">
+        <label class="fld">纹路要求
+          <select id="pfGrain">
+            <option value="long">顺纹（沿长向）</option>
+            <option value="cross">顺纹（沿短向）</option>
+            <option value="none">无要求</option>
+            <option value="fixed">禁止旋转</option>
+          </select>
+        </label>
+        <label class="fld">封边
+          <select id="pfEdge">
+            <option value="0">不封边</option>
+            <option value="2long">两长边封边</option>
+            <option value="2short">两短边封边</option>
+            <option value="4">四边封边</option>
+          </select>
+        </label>
+      </div>
+      <label class="fld">备注<input type="text" id="pfNote" placeholder="可选"></label>
+    </div>
+    <div class="mfoot">
+      <button class="btn danger" id="pfDelete" style="margin-right:auto;display:none">删除</button>
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" id="pfSave">保存并重算</button>
+    </div>
+  </div>
+</div>
+
+<!-- 板材弹窗 -->
+<div class="modal-mask" id="stockModal">
+  <div class="modal">
+    <h3 id="stockModalTitle">新增板材规格</h3>
+    <div class="mbody">
+      <input type="hidden" id="sfId">
+      <label class="fld">材质颜色
+        <select id="sfMaterial"></select>
+      </label>
+      <div class="flds2">
+        <label class="fld">长 (mm)<input type="number" id="sfL" value="2440"></label>
+        <label class="fld">宽 (mm)<input type="number" id="sfW" value="1220"></label>
+        <label class="fld">厚度 (mm)<input type="number" id="sfThick" value="18"></label>
+        <label class="fld">库存张数<input type="number" id="sfQty" value="10" min="0"></label>
+      </div>
+      <div class="flds2">
+        <label class="fld">批次/色号<input type="text" id="sfBatch" placeholder="如 202609-A"></label>
+        <label class="fld">纹路方向
+          <select id="sfGrain">
+            <option value="long">顺纹沿长向</option>
+            <option value="cross">顺纹沿短向</option>
+            <option value="none">素板（无纹路）</option>
+          </select>
+        </label>
+      </div>
+      <label class="fld">单价（元/张，用于对比，可选）<input type="number" id="sfPrice" value="0" min="0" step="1"></label>
+    </div>
+    <div class="mfoot">
+      <button class="btn danger" id="sfDelete" style="margin-right:auto;display:none">删除</button>
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" id="sfSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 余料弹窗 -->
+<div class="modal-mask" id="remModal">
+  <div class="modal">
+    <h3 id="remModalTitle">登记余料</h3>
+    <div class="mbody">
+      <input type="hidden" id="rfId">
+      <label class="fld">材质颜色<select id="rfMaterial"></select></label>
+      <div class="flds2">
+        <label class="fld">长 (mm)<input type="number" id="rfL" min="1"></label>
+        <label class="fld">宽 (mm)<input type="number" id="rfW" min="1"></label>
+        <label class="fld">厚度 (mm)<input type="number" id="rfThick" value="18"></label>
+        <label class="fld">批次/色号<input type="text" id="rfBatch"></label>
+      </div>
+      <label class="fld">纹路方向
+        <select id="rfGrain">
+          <option value="long">顺纹沿长向</option>
+          <option value="cross">顺纹沿短向</option>
+          <option value="none">素板（无纹路）</option>
+        </select>
+      </label>
+    </div>
+    <div class="mfoot">
+      <button class="btn danger" id="rfDelete" style="margin-right:auto;display:none">删除</button>
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" id="rfSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 手动加板弹窗 -->
+<div class="modal-mask" id="boardModal">
+  <div class="modal">
+    <h3>手动加一张板</h3>
+    <div class="mbody">
+      <div class="muted" style="margin-bottom:8px;font-size:12px">从同材质批次的库存整板或余料中选择（不同批次不能混用）：</div>
+      <div id="boardPickList"></div>
+    </div>
+    <div class="mfoot"><button class="btn" data-close>取消</button></div>
+  </div>
+</div>
+
+<!-- 对比弹窗 -->
+<div class="modal-mask" id="compareModal">
+  <div class="modal" style="width:720px">
+    <h3>⚖ 方案 A / B 对比（用料 · 余料）</h3>
+    <div class="mbody"><div class="cmp-grid" id="cmpGrid"></div></div>
+    <div class="mfoot"><button class="btn primary" data-close>知道了</button></div>
+  </div>
+</div>
+
+<!-- 收余料弹窗 -->
+<div class="modal-mask" id="saveRemModal">
+  <div class="modal">
+    <h3>收入余料库</h3>
+    <div class="mbody">
+      <div class="muted" style="font-size:12px;margin-bottom:8px">勾选要留给后续订单的余料（可编辑尺寸）：</div>
+      <div id="saveRemList"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" id="saveRemConfirm">收入选中余料</button>
+    </div>
+  </div>
+</div>
+
+<div class="drag-ghost" id="dragGhost"><div class="gtxt"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   板材开料排版 —— 状态模型与工具函数
+   ============================================================ */
+const LS_KEY = "nesting_planner_v1";
+
+const GRAIN_LABEL = {long:"顺纹长向", cross:"顺纹短向", none:"无纹路", fixed:"禁转"};
+const EDGE_LABEL = {"0":"不封边","2long":"两长边","2short":"两短边","4":"四边封边"};
+const uid = p => p + "_" + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-3);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const round1 = v=>Math.round(v*10)/10;
+const fmt = n => (Math.round(n*10)/10).toLocaleString("zh-CN");
+const area = (l,w)=>l*w;
+
+function seedData(){
+  const M_W = "18mm 暖白颗粒板", M_B = "9mm 浅灰密度背板";
+  return {
+    settings:{ kerf:4, minRem:120, defaultGrain:"long", strategy:"bss", autoRecalc:true },
+    materials:[M_W, M_B],
+    parts:[
+      {id:uid("p"), name:"衣柜左侧板",  l:600, w:560, qty:2, thick:18, material:M_W, batch:"2609A", grain:"long", edge:"2long", note:""},
+      {id:uid("p"), name:"衣柜右侧板",  l:600, w:560, qty:2, thick:18, material:M_W, batch:"2609A", grain:"long", edge:"2long", note:""},
+      {id:uid("p"), name:"顶板",        l:800, w:560, qty:2, thick:18, material:M_W, batch:"2609A", grain:"cross", edge:"2long", note:""},
+      {id:uid("p"), name:"底板",        l:800, w:560, qty:1, thick:18, material:M_W, batch:"2609A", grain:"cross", edge:"4", note:""},
+      {id:uid("p"), name:"中竖隔板",    l:580, w:520, qty:2, thick:18, material:M_W, batch:"2609A", grain:"long", edge:"0", note:""},
+      {id:uid("p"), name:"抽屉面板",    l:450, w:200, qty:4, thick:18, material:M_W, batch:"2609A", grain:"long", edge:"4", note:""},
+      {id:uid("p"), name:"门板",        l:1150,w:400, qty:2, thick:18, material:M_W, batch:"2609A", grain:"long", edge:"4", note:"纹路朝上"},
+      {id:uid("p"), name:"背板",        l:1180,w:560, qty:2, thick:9,  material:M_B, batch:"2609B", grain:"none", edge:"0", note:"插槽背板"},
+      {id:uid("p"), name:"背板小块",    l:560, w:400, qty:2, thick:9,  material:M_B, batch:"2609B", grain:"none", edge:"0", note:""}
+    ],
+    stocks:[
+      {id:uid("s"), material:M_W, l:2440, w:1220, thick:18, qty:20, batch:"2609A", grain:"long", price:135},
+      {id:uid("s"), material:M_B, l:2440, w:1220, thick:9,  qty:10, batch:"2609B", grain:"none", price:78}
+    ],
+    remnants:[],
+    plans:{
+      A:{ boards:[], active:true },
+      B:{ boards:[], active:false }
+    }
+  };
+}
+
+let S = null;
+let activePlan = "A";
+
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e){}
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return null;
+    const d = JSON.parse(raw);
+    if(d && d.parts && d.stocks && d.plans) return d;
+  }catch(e){}
+  return null;
+}
+function getPlan(){ return S.plans[activePlan]; }
+function partById(id){ return S.parts.find(p=>p.id===id); }
+function stockById(id){ return S.stocks.find(s=>s.id===id); }
+function remById(id){ return S.remnants.find(r=>r.id===id); }
+function boardSource(b){
+  return b.sourceType==="remnant" ? remById(b.sourceId) : stockById(b.sourceId);
+}
+function allPlaced(){
+  const map = new Map();
+  Object.values(S.plans).forEach(pl=>pl.boards.forEach(b=>(b.items||[]).forEach(it=>{
+    map.set(it.uid, {board:b, item:it});
+  })));
+  return map;
+}
+/* 某方案下每种板件已放置数量 */
+function placedCount(planKey){
+  const c = {};
+  S.plans[planKey].boards.forEach(b=>(b.items||[]).forEach(it=>{
+    c[it.partId] = (c[it.partId]||0)+1;
+  }));
+  return c;
+}
+function unplacedInstances(planKey){
+  const c = placedCount(planKey);
+  const out = [];
+  S.parts.forEach(p=>{
+    const n = p.qty - (c[p.id]||0);
+    for(let i=0;i<n;i++) out.push({partId:p.id});
+  });
+  return out;
+}
+/* ============================================================
+   几何工具：相交、矩形扣减（用于余料计算）
+   ============================================================ */
+function rectsOverlap(a,b){
+  return a.x < b.x+b.w - 1e-6 && a.x+a.w > b.x + 1e-6 &&
+         a.y < b.y+b.h - 1e-6 && a.y+a.h > b.y + 1e-6;
+}
+/* 从 r 中扣去 sub，返回若干不相交剩余矩形（十字切分，面积不重不漏） */
+function subtractRect(r, sub){
+  if(!rectsOverlap(r,sub)) return [r];
+  const out = [];
+  // 左条
+  if(sub.x > r.x + 1e-6) out.push({x:r.x,y:r.y,w:sub.x-r.x,h:r.h});
+  // 右条
+  if(sub.x+sub.w < r.x+r.w - 1e-6) out.push({x:sub.x+sub.w,y:r.y,w:r.x+r.w-(sub.x+sub.w),h:r.h});
+  // 下条（仅取中间带，避免与左右条重叠）
+  const xL = Math.max(r.x, sub.x), xR = Math.min(r.x+r.w, sub.x+sub.w);
+  if(sub.y > r.y + 1e-6) out.push({x:xL,y:r.y,w:xR-xL,h:sub.y-r.y});
+  // 上条
+  if(sub.y+sub.h < r.y+r.h - 1e-6) out.push({x:xL,y:sub.y+sub.h,w:xR-xL,h:r.y+r.h-(sub.y+sub.h)});
+  return out.filter(q=>q.w>1 && q.h>1);
+}
+/* ============================================================
+   匹配规则：批次 / 材质 / 厚度 / 纹路
+   ============================================================ */
+function sameBatch(partBatch, sheetBatch){
+  // 批次为空时按“不限”处理；都有值时必须一致
+  if(partBatch && sheetBatch) return partBatch.trim()===sheetBatch.trim();
+  return true;
+}
+function partFitsSource(p, src){
+  if(!src) return false;
+  if(p.material!==src.material) return false;
+  if(p.thick!==src.thick) return false;
+  if(!sameBatch(p.batch, src.batch)) return false;
+  return true;
+}
+/*
+  返回板件在该板材上允许的摆放朝向列表。
+  slot: {w,h,rot} rot=false 表示板件 L 沿板长(x)；true 表示旋转90°
+  板坐标系：x 沿板长方向(l)，y 沿板宽方向(w)。
+  板纹路 long：纹理沿 x；cross：沿 y；none：任意。
+  板件要求 long：纹理必须沿板件长 L（L 所贴的方向要有纹）；
+           cross：纹理沿板件短 W；fixed：禁止旋转；none：任意。
+*/
+function allowedSlots(p, sheet, k){
+  const kerf = k||0;
+  const L = p.l + kerf, W = p.w + kerf;
+  const tryList = [];
+  // 不旋转：L->x, W->y
+  tryList.push({w:L,h:W,rot:false});
+  // 旋转：W->x, L->y
+  if(p.l!==p.w) tryList.push({w:W,h:L,rot:true});
+  return tryList.filter(s=>{
+    if(s.w > sheet.l+1e-6 || s.h > sheet.w+1e-6) return false;
+    if(p.grain==="fixed") return !s.rot;
+    if(p.grain==="none" || sheet.grain==="none") return true;
+    // 纹理主方向单位向量：板 long -> x轴；板 cross -> y轴
+    const grainAxis = sheet.grain==="long" ? "x" : "y";
+    if(p.grain==="long"){
+      // 板件长 L 方向必须与纹理同向：不旋转时 L 在 x，旋转后 L 在 y
+      return s.rot ? grainAxis==="y" : grainAxis==="x";
+    }
+    if(p.grain==="cross"){
+      // 板件短 W 方向必须与纹理同向：不旋转 W 在 y，旋转后 W 在 x
+      return s.rot ? grainAxis==="x" : grainAxis==="y";
+    }
+    return true;
+  });
+}
+
+/* ============================================================
+   MaxRects 单张板装箱器（BSS / BAF），尺寸已含锯缝
+   ============================================================ */
+class MaxRects{
+  constructor(sheet, kerf, strategy){
+    this.sheet = sheet;
+    this.kerf = kerf||0;
+    this.strategy = strategy||"bss";
+    this.free = [{x:0,y:0,w:sheet.l,h:sheet.w}];
+    this.placed = [];
+  }
+  scoreNode(slot, node){
+    if(this.strategy==="baf"){
+      // Bottom-Left / Best Area Fit：优先贴左下，再比贴合面积
+      return [node.y, node.x, node.w*node.h - slot.w*slot.h];
+    }
+    // Best Short Side Fit
+    const dx = node.w-slot.w, dy = node.h-slot.h;
+    return [Math.min(dx,dy), Math.max(dx,dy), node.y, node.x];
+  }
+  better(a,b){
+    for(let i=0;i<a.length;i++){ if(Math.abs(a[i]-b[i])>1e-9) return a[i]<b[i]; }
+    return false;
+  }
+  findBest(slot){
+    let bestNode=null, bestScore=null;
+    for(const f of this.free){
+      if(f.w>=slot.w-1e-6 && f.h>=slot.h-1e-6){
+        const sc = this.scoreNode(slot,f);
+        if(!bestScore || this.better(sc,bestScore)){ bestScore=sc; bestNode=f; }
+      }
+    }
+    return bestNode;
+  }
+  tryPlace(p){
+    const slots = allowedSlots(p,this.sheet,this.kerf);
+    let best=null;
+    for(const slot of slots){
+      const node = this.findBest(slot);
+      if(node){
+        const sc = this.scoreNode(slot,node);
+        if(!best || this.better(sc,best.sc)) best={slot,node,sc};
+      }
+    }
+    return best; // {slot,node}
+  }
+  place(p, best){
+    best = best || this.tryPlace(p);
+    if(!best) return null;
+    const {slot,node} = best;
+    const item = {partId:p.id, x:round1(node.x), y:round1(node.y), rot:slot.rot};
+    this.placed.push(item);
+    this._splitFree(node, slot);
+    this._prune();
+    return item;
+  }
+  _splitFree(used, slot){
+    const next=[];
+    for(const f of this.free){
+      // 有重叠才切
+      if(used.x < f.x+f.w && used.x+slot.w > f.x &&
+         used.y < f.y+f.h && used.y+slot.h > f.y){
+        // 上
+        if(used.y+slot.h < f.y+f.h)
+          next.push({x:f.x,y:used.y+slot.h,w:f.w,h:f.y+f.h-(used.y+slot.h)});
+        // 右
+        if(used.x+slot.w < f.x+f.w)
+          next.push({x:used.x+slot.w,y:f.y,w:f.x+f.w-(used.x+slot.w),h:f.h});
+        // 下
+        if(used.y > f.y)
+          next.push({x:f.x,y:f.y,w:f.w,h:used.y-f.y});
+        // 左
+        if(used.x > f.x)
+          next.push({x:f.x,y:f.y,w:used.x-f.x,h:f.h});
+      }else{
+        next.push(f);
+      }
+    }
+    this.free = next;
+  }
+  _prune(){
+    for(let i=0;i<this.free.length;i++){
+      for(let j=i+1;j<this.free.length;j++){
+        const a=this.free[i], b=this.free[j];
+        if(b.x>=a.x-1e-6 && b.y>=a.y-1e-6 &&
+           b.x+b.w<=a.x+a.w+1e-6 && b.y+b.h<=a.y+a.h+1e-6){
+          this.free.splice(j--,1);
+        }else if(a.x>=b.x-1e-6 && a.y>=b.y-1e-6 &&
+                  a.x+a.w<=b.x+b.w+1e-6 && a.y+a.h<=b.y+b.h+1e-6){
+          this.free.splice(i--,1); break;
+        }
+      }
+    }
+  }
+}
+
+/* ============================================================
+   余料几何计算：从整张板中扣掉所有已放板件（含锯缝外扩）
+   ============================================================ */
+function itemRect(it, p, kerf){
+  const w = (it.rot?p.w:p.l) + kerf;
+  const h = (it.rot?p.l:p.w) + kerf;
+  return {x:it.x,y:it.y,w,h};
+}
+function computeOffcuts(board, kerf, minSide){
+  const src = boardSource(board);
+  if(!src) return [];
+  let rects = [{x:0,y:0,w:src.l,h:src.w}];
+  (board.items||[]).forEach(it=>{
+    const p = partById(it.partId);
+    if(!p) return;
+    const sub = itemRect(it,p,kerf);
+    rects = rects.flatMap(r=>subtractRect(r,sub));
+  });
+  const minS = minSide||0;
+  return rects
+    .map(r=>({x:round1(r.x),y:round1(r.y),l:round1(r.w),w:round1(r.h),area:r.w*r.h}))
+    .filter(r=>r.l>=minS && r.w>=minS)
+    .sort((a,b)=>b.area-a.area);
+}
+
+/* ============================================================
+   自动排版（当前方案）
+   规则：
+   - 锁定板原样不动；未锁定的非空板，其上的板件全部拆下参与重排；
+   - 空的未锁定板（无论整板/余料）释放回库存概念，直接移除；
+   - 板件按 材质+批次+纹路 聚类、大件优先排序；
+   - 每张板用 MaxRects 试摆，优先：余料 → 已占用同批次未锁定板 → 新开最小可放板；
+   - 放不下的留在待排区。
+   ============================================================ */
+function autoPack(){
+  const plan = getPlan();
+  const kerf = S.settings.kerf||0;
+  const locked = [];
+  let pool = [];
+
+  plan.boards.forEach(b=>{
+    if(b.locked){ locked.push(b); return; }
+    (b.items||[]).forEach(it=>pool.push({partId:it.partId}));
+  });
+  // 加待排
+  pool = pool.concat(unplacedInstances(planKey()));
+  // 去重保护：unplacedInstances 已按 qty-已放 计算，但我们刚把未锁定板件拆了，
+  // 需要基于“锁定板之外的总量”重新算，因此 pool 直接以板件数重建：
+  pool = [];
+  const lockedCount = {};
+  locked.forEach(b=>(b.items||[]).forEach(it=>lockedCount[it.partId]=(lockedCount[it.partId]||0)+1));
+  S.parts.forEach(p=>{
+    const need = Math.max(0, p.qty-(lockedCount[p.id]||0));
+    for(let i=0;i<need;i++) pool.push({partId:p.id});
+  });
+
+  // 排序：材质 → 批次 → 纹路要求（fixed/long/cross/none）→ 面积大→小 → 长边
+  const grainRank = {fixed:0,long:1,cross:2,none:3};
+  pool.sort((a,b)=>{
+    const pa=partById(a.partId), pb=partById(b.partId);
+    return (pa.material+"|"+(pa.batch||"")+"|"+grainRank[pa.grain]).localeCompare(
+           (pb.material+"|"+(pb.batch||"")+"|"+grainRank[pb.grain])) ||
+           pb.l*pb.w-pa.l*pa.w || pb.l-pa.l;
+  });
+
+  // 工作板：锁定板（只读，不参与摆放）；未锁定旧板全部丢弃重建
+  plan.boards = locked.slice();
+  const workBoards = []; // {board, packer}
+  locked.forEach(b=>workBoards.push({board:b, packer:null}));
+
+  // 库存记账（整板按张，余料按条）
+  const stockUsed = {};
+  const remUsed = new Set();
+
+  function openBoards(){
+    // 当前可写入的未锁定板（按已利用率高→低，便于聚料）
+    return workBoards.filter(w=>w.packer)
+      .map(w=>w);
+  }
+  function availableNewSources(p){
+    // 返回 [{type:'remnant'|'stock', obj, sheetView}]，按面积小→大（省大料）
+    const list=[];
+    S.remnants.forEach(r=>{
+      if(remUsed.has(r.id)) return;
+      if(partFitsSource(p,r)) list.push({type:"remnant",obj:r});
+    });
+    S.stocks.forEach(st=>{
+      const used = stockUsed[st.id]||0;
+      if(st.qty-used>0 && partFitsSource(p,st)) list.push({type:"stock",obj:st});
+    });
+    list.sort((a,b)=>a.obj.l*a.obj.w - b.obj.l*b.obj.w);
+    return list;
+  }
+  function addBoard(src, type){
+    const board = {
+      id:uid("b"), sourceId:src.id, sourceType:type,
+      items:[], locked:false, savedRemnants:[]
+    };
+    plan.boards.push(board);
+    const packer = new MaxRects(src, kerf, S.settings.strategy);
+    const wb = {board, packer};
+    workBoards.push(wb);
+    return wb;
+  }
+
+  const unplaced = [];
+  for(const inst of pool){
+    const p = partById(inst.partId);
+    if(!p) continue;
+    // 1) 现有未锁定板里试，全局选评分最好的位置：
+    //    贴合最紧 → 同纹路件多（纹路聚类）→ 板上件多（聚料省板）→ 靠左下
+    let target=null, best=null;
+    const cands = openBoards().filter(w=>{
+      const src = boardSource(w.board);
+      return src && partFitsSource(p,src);
+    });
+    for(const w of cands){
+      const t = w.packer.tryPlace(p);
+      if(t){
+        const sameGrain = w.board.items.filter(it2=>{
+          const p2 = partById(it2.partId);
+          return p2 && p2.grain===p.grain;
+        }).length;
+        const sc = [t.sc[0], t.sc[1], -sameGrain, -w.board.items.length, t.sc[2], t.sc[3]];
+        if(!best || scLess(sc,best.sc)){ best={sc,t,w}; }
+      }
+    }
+    if(best){
+      best.w.packer.place(p,best.t);
+      best.w.board.items = best.w.packer.placed.slice();
+      continue;
+    }
+    // 2) 开新板：余料优先，其次最小整板（availableNewSources 已按面积排序）
+    const sources = availableNewSources(p);
+    let placed=false;
+    for(const srcCand of sources){
+      const slotsOk = allowedSlots(p, srcCand.obj, kerf).length>0;
+      if(!slotsOk) continue;
+      const wb = addBoard(srcCand.obj, srcCand.type);
+      if(srcCand.type==="remnant") remUsed.add(srcCand.obj.id);
+      else stockUsed[srcCand.obj.id]=(stockUsed[srcCand.obj.id]||0)+1;
+      const t = wb.packer.tryPlace(p);
+      if(t){
+        wb.packer.place(p,t);
+        wb.board.items = wb.packer.placed.slice();
+        placed=true;
+        break;
+      }else{
+        // 理论不该发生（已校验尺寸），保险起见释放
+        plan.boards = plan.boards.filter(b=>b.id!==wb.board.id);
+        workBoards.pop();
+        if(srcCand.type==="remnant") remUsed.delete(srcCand.obj.id);
+        else stockUsed[srcCand.obj.id]-=1;
+      }
+    }
+    if(!placed) unplaced.push(p);
+  }
+
+  // 写回：只保留锁定板 + 有件的未锁定板
+  const usedIds = new Set(workBoards.filter(w=>w.board.items.length>0).map(w=>w.board.id));
+  plan.boards = plan.boards.filter(b=>b.locked || usedIds.has(b.id));
+  return {unplaced, stockUsed};
+}
+function scLess(a,b){
+  const A=a.slice(0,3), B=b.slice(0,3);
+  for(let i=0;i<A.length;i++){ if(Math.abs(A[i]-B[i])>1e-9) return A[i]<B[i]; }
+  return false;
+}
+function planKey(){ return activePlan; }
+/* ============================================================
+   校验：越界 / 重叠 / 纹路 / 批次 / 板件缺失
+   ============================================================ */
+function validateBoard(board){
+  const issues = [];
+  const src = boardSource(board);
+  const kerf = S.settings.kerf||0;
+  if(!src){
+    return [{level:"bad", msg:"板材来源已删除（库存/余料中找不到），请移除本板或重新指定板材"}];
+  }
+  const rects = [];
+  board.items.forEach((it,idx)=>{
+    const p = partById(it.partId);
+    it.uid = it.uid || uid("it");
+    if(!p){ issues.push({level:"bad", partUid:it.uid, msg:"存在已删除的板件"}); return; }
+    const w = it.rot?p.w:p.l, h = it.rot?p.l:p.w;
+    // 越界
+    if(it.x < -0.01 || it.y < -0.01 ||
+       it.x + w > src.l + 0.01 || it.y + h > src.w + 0.01){
+      issues.push({level:"bad", partUid:it.uid,
+        msg:`「${p.name}」越界：摆放 ${fmt(w)}×${fmt(h)}@(${fmt(it.x)},${fmt(it.y)})，板材仅 ${fmt(src.l)}×${fmt(src.w)}`});
+    }
+    // 纹路
+    const slots = allowedSlots(p, src, 0);
+    if(!slots.some(s=>s.rot===it.rot)){
+      let reason = "纹路方向不符";
+      if(p.grain==="fixed") reason="禁转板件不允许旋转";
+      else if(p.grain!=="none" && src.grain!=="none")
+        reason=`纹路不符：板件要求${GRAIN_LABEL[p.grain]}，板材纹路${GRAIN_LABEL[src.grain]}`;
+      issues.push({level:"bad", partUid:it.uid, msg:`「${p.name}」${reason}`});
+    }
+    // 批次/材质（拖动入口已拦，这里兜底）
+    if(p.material!==src.material)
+      issues.push({level:"bad", partUid:it.uid, msg:`「${p.name}」材质 ${p.material} 与板材 ${src.material} 不一致`});
+    if(!sameBatch(p.batch,src.batch))
+      issues.push({level:"bad", partUid:it.uid, msg:`「${p.name}」批次 ${p.batch||"空"} 与板材批次 ${src.batch||"空"} 不同，禁止混用`});
+    if(p.thick!==src.thick)
+      issues.push({level:"bad", partUid:it.uid, msg:`「${p.name}」厚度 ${p.thick}mm 与板材 ${src.thick}mm 不一致`});
+    rects.push({it,w,h:h+kerf,w2:w+kerf,name:p.name,uid:it.uid});
+  });
+  // 重叠（含锯缝）：同一对只报一条，两个件都标红
+  const seenOverlap=new Set();
+  for(let i=0;i<rects.length;i++){
+    for(let j=i+1;j<rects.length;j++){
+      const a={x:board.items[i].x,y:board.items[i].y,w:rects[i].w2,h:rects[i].h};
+      const b={x:board.items[j].x,y:board.items[j].y,w:rects[j].w2,h:rects[j].h};
+      if(rectsOverlap(a,b)){
+        const key=[rects[i].name,rects[j].name].sort().join("|");
+        if(!seenOverlap.has(key)){
+          seenOverlap.add(key);
+          issues.push({level:"bad", partUid:rects[i].uid,
+            msg:`「${rects[i].name}」与「${rects[j].name}」重叠（含 ${kerf}mm 锯缝）`});
+        }
+        issues.push({level:"bad", partUid:rects[j].uid, msg:`__MARK__`});
+      }
+    }
+  }
+  return issues;
+}
+function planValidation(planKey){
+  const map = new Map(); // partUid -> issues
+  const boardIssues = [];
+  S.plans[planKey].boards.forEach(b=>{
+    const iss = validateBoard(b);
+    boardIssues.push({board:b, issues:iss});
+    iss.forEach(x=>{ if(x.partUid) map.set(x.partUid, (map.get(x.partUid)||0)+1); });
+  });
+  return {boardIssues, badUids:map};
+}
+
+/* ============================================================
+   统计：利用率、余料、用料
+   ============================================================ */
+function boardStats(board){
+  const src = boardSource(board);
+  if(!src) return {used:0, sheet:0, ratio:0, offcuts:[]};
+  let used=0;
+  (board.items||[]).forEach(it=>{
+    const p=partById(it.partId); if(p) used += p.l*p.w;
+  });
+  const sheet = src.l*src.w;
+  return {used, sheet, ratio: used/sheet, offcuts: computeOffcuts(board, S.settings.kerf, 0)};
+}
+function planStats(planKey){
+  const pl = S.plans[planKey];
+  let used=0, sheetArea=0, cost=0;
+  const stockCount = {}, remCount={};
+  let validBoards=0, issueBoards=0;
+  const valid = planValidation(planKey);
+  const badBoardIds = new Set(valid.boardIssues
+    .filter(x=>x.issues.some(i=>i.msg!=="__MARK__")).map(x=>x.board.id));
+  pl.boards.forEach(b=>{
+    const st=boardStats(b), src=boardSource(b);
+    used+=st.used; sheetArea+=st.sheet;
+    if(src){
+      if(b.sourceType==="remnant"){ remCount[src.id]=(remCount[src.id]||0)+1; cost+=src.price||0; }
+      else { stockCount[src.id]=(stockCount[src.id]||0)+1; cost+=src.price||0; }
+    }
+    validBoards++;
+    if(badBoardIds.has(b.id)) issueBoards++;
+  });
+  // 余料：未锁定板按几何余料（最大两块、≥最小边）；锁定板只计已登记入库的
+  let remArea=0;
+  const remDetails=[];
+  pl.boards.forEach(b=>{
+    if(b.locked){
+      (b.savedRemnants||[]).forEach(r=>{remArea+=r.l*r.w; remDetails.push(r);});
+    }else{
+      const offs = computeOffcuts(b, S.settings.kerf, S.settings.minRem).slice(0,2);
+      offs.forEach(o=>{remArea+=o.l*o.w; remDetails.push(o);});
+    }
+  });
+  const c = placedCount(planKey);
+  let placedN=0, totalN=0;
+  S.parts.forEach(p=>{ placedN+=Math.min(p.qty,c[p.id]||0); totalN+=p.qty; });
+  return {
+    boards:validBoards, issueBoards, used, sheetArea,
+    ratio: sheetArea? used/sheetArea : 0,
+    placedN, totalN,
+    stockCount, remCount, cost,
+    remArea, remRatio: sheetArea? remArea/sheetArea : 0,
+    details: valid
+  };
+}
+
+/* ============================================================
+   方案对比
+   ============================================================ */
+function comparePlans(){
+  const a = planStats("A"), b = planStats("B");
+  // 评判维度：板张数少 → 利用率高 → 余料多 → 成本低
+  const score = st=>[st.placedN?st.boards:99999, -st.ratio, -st.remRatio, st.cost];
+  function cmpLess(x,y){ for(let i=0;i<x.length;i++){ if(Math.abs(x[i]-y[i])>1e-9) return x[i]<y[i]; } return false; }
+  const aWin = cmpLess(score(a),score(b));
+  const bWin = cmpLess(score(b),score(a));
+  return {a,b,aWin,bWin};
+}
+
+/* ============================================================
+   余料入库 / 优先提示
+   ============================================================ */
+function saveRemnantsFromBoard(boardId, picks){
+  const board = getPlan().boards.find(b=>b.id===boardId);
+  if(!board) return;
+  const src = boardSource(board);
+  picks.forEach(pk=>{
+    if(!pk.keep) return;
+    const r = {
+      id:uid("r"), material:src.material, thick:src.thick, batch:src.batch,
+      grain:src.grain, l:Math.round(pk.l), w:Math.round(pk.w),
+      price:0, fromBoard:boardId, note:`由${src.l}×${src.w}开料余料`
+    };
+    S.remnants.push(r);
+    board.savedRemnants = board.savedRemnants||[];
+    board.savedRemnants.push({id:r.id,l:r.l,w:r.w});
+  });
+}
+/* 为某板件找可用余料（面积能放下且纹路允许），按面积小→大 */
+function suggestRemnants(p){
+  const kerf = S.settings.kerf||0;
+  const out=[];
+  S.remnants.forEach(r=>{
+    if(!partFitsSource(p,r)) return;
+    if(allowedSlots(p,r,kerf).length>0) out.push(r);
+  });
+  return out.sort((a,b)=>a.l*a.w-b.l*b.w);
+}
+
+/* ============================================================
+   导出 CSV 开料单
+   ============================================================ */
+function csvCell(v){
+  v = (v===null||v===undefined)?"":String(v);
+  return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v;
+}
+function edgeText(p, rot){
+  // 物理世界：板件长 L 的两条边 = 长边；旋转只改变在板上的方向，不改变封边归属
+  if(p.edge==="0") return "不封边";
+  if(p.edge==="4") return "四边封边";
+  if(p.edge==="2long") return "2条长边封边";
+  if(p.edge==="2short") return "2条短边封边";
+  return "";
+}
+function buildCSV(){
+  const pl = getPlan();
+  const rows=[];
+  rows.push(["板材开料单 —— 方案 "+activePlan,
+    "生成时间 "+new Date().toLocaleString("zh-CN"),
+    "锯缝 "+(S.settings.kerf||0)+"mm"]);
+  rows.push([]);
+  // 汇总
+  const st = planStats(activePlan);
+  rows.push(["【用料汇总】"]);
+  rows.push(["板张数", st.boards, "板件完成", st.placedN+"/"+st.totalN,
+    "综合利用率", (st.ratio*100).toFixed(1)+"%",
+    "余料面积", fmt(st.remArea)+" mm²", "板材成本(元)", st.cost||"—"]);
+  rows.push([]);
+  // 每张板
+  pl.boards.forEach((b,bi)=>{
+    const src = boardSource(b);
+    const bs = boardStats(b);
+    rows.push([`【第 ${bi+1} 张板】${src?src.l+"×"+src.w:"?"} ${src?src.material:"板材缺失"}`+
+      ` 批次:${src?src.batch||"—":"—"} 纹路:${src?GRAIN_LABEL[src.grain]:"—"}`+
+      ` 来源:${b.sourceType==="remnant"?"余料":"整板"} 利用率:${(bs.ratio*100).toFixed(1)}%`+
+      (b.locked?" [已锁定]":"")]);
+    rows.push(["板件","数量序号","长(mm)","宽(mm)","厚(mm)","X(mm)","Y(mm)",
+      "在板方向","纹路要求","封边","批次","材质","备注"]);
+    const seqMap={};
+    const totalMap={};
+    b.items.forEach(it=>{ totalMap[it.partId]=(totalMap[it.partId]||0)+1; });
+    b.items.forEach(it=>{
+      const p=partById(it.partId);
+      if(!p) return;
+      seqMap[it.partId]=(seqMap[it.partId]||0)+1;
+      rows.push([
+        p.name, seqMap[it.partId]+"/"+totalMap[it.partId], p.l, p.w, p.thick,
+        Math.round(it.x), Math.round(it.y),
+        it.rot?"旋转90°":"正向",
+        GRAIN_LABEL[p.grain], edgeText(p,it.rot),
+        p.batch||"", p.material, p.note||""
+      ]);
+    });
+    // 余料
+    const offs = b.locked ? (b.savedRemnants||[]) :
+      computeOffcuts(b,S.settings.kerf,S.settings.minRem).slice(0,2);
+    if(offs.length){
+      rows.push(["余料：", ...offs.map(o=>`${Math.round(o.l)}×${Math.round(o.w)}mm @(${Math.round(o.x)},${Math.round(o.y)})`)]);
+    }
+    rows.push([]);
+  });
+  // 未排板件
+  const c = placedCount(activePlan);
+  const missing=[];
+  S.parts.forEach(p=>{
+    const n = p.qty-(c[p.id]||0);
+    for(let i=0;i<n;i++) missing.push(p);
+  });
+  if(missing.length){
+    rows.push(["【未排板件】"]);
+    rows.push(["板件","长(mm)","宽(mm)","厚(mm)","纹路","批次","材质","原因/建议"]);
+    missing.forEach(p=>{
+      const rem = suggestRemnants(p);
+      rows.push([p.name,p.l,p.w,p.thick,GRAIN_LABEL[p.grain],p.batch||"",p.material,
+        rem.length?("可用余料 "+rem[0].l+"×"+rem[0].w):"无匹配板材或板件超大"]);
+    });
+  }
+  return rows.map(r=>r.map(csvCell).join(",")).join("\n");
+}
+/* ============================================================
+   UI：小工具
+   ============================================================ */
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+function toast(msg, isErr){
+  const t=$("#toast"); t.textContent=msg; t.className="toast show"+(isErr?" err":"");
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.className="toast"+(isErr?" err":""),2400);
+}
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function grainDotClass(g){ return "grain-dot grain-"+g; }
+function materialOptions(sel){
+  return S.materials.map(m=>`<option value="${esc(m)}" ${m===sel?"selected":""}>${esc(m)}</option>`).join("");
+}
+function refreshMaterialOptions(){
+  const v=$("#pfMaterial").value;
+  $("#pfMaterial").innerHTML = materialOptions(v) + `<option value="__new__">＋ 新建材质…</option>`;
+  $("#sfMaterial").innerHTML = materialOptions($("#sfMaterial").value);
+  $("#rfMaterial").innerHTML = materialOptions($("#rfMaterial").value);
+}
+function ensureMaterial(name){
+  name=(name||"").trim();
+  if(name && !S.materials.includes(name)) S.materials.push(name);
+}
+
+/* ============================================================
+   侧栏：板件列表
+   ============================================================ */
+function renderParts(){
+  const c = placedCount(activePlan);
+  let html="";
+  S.parts.forEach(p=>{
+    const n = c[p.id]||0;
+    const done = n>=p.qty;
+    const rem = suggestRemnants(p);
+    html += `<div class="list-item" data-part="${p.id}">
+      <div class="li-title">
+        <span class="${grainDotClass(p.grain)}"></span>${esc(p.name)}
+        <span class="pill ${done?"":"tag"}" style="${done?"background:#dcfce7;color:#166534":""}">${n}/${p.qty}</span>
+      </div>
+      <div class="li-meta">
+        <span>${fmt(p.l)}×${fmt(p.w)}×${p.thick}</span>
+        <span>${GRAIN_LABEL[p.grain]}</span>
+        ${p.edge!=="0"?`<span>封边:${EDGE_LABEL[p.edge]}</span>`:""}
+        <span class="tag">${esc(p.material)}</span>
+        ${p.batch?`<span class="tag batch">批 ${esc(p.batch)}</span>`:""}
+        ${rem.length?`<span class="tag rem">余料可用 ${fmt(rem[0].l)}×${fmt(rem[0].w)}</span>`:""}
+      </div>
+      <div class="li-actions">
+        <button class="btn sm" data-act="edit-part">编辑</button>
+        <button class="btn sm" data-act="dup-part">复制</button>
+        <button class="btn sm danger" data-act="del-part">删除</button>
+      </div>
+    </div>`;
+  });
+  $("#partList").innerHTML = html || `<div class="empty-tip">还没有板件，点「＋ 新增板件」开始</div>`;
+  const total=S.parts.reduce((a,p)=>a+p.qty,0);
+  const doneN=S.parts.reduce((a,p)=>a+Math.min(p.qty,c[p.id]||0),0);
+  $("#partCount").textContent = `${doneN}/${total} 件已排`;
+}
+$("#partList").addEventListener("click", e=>{
+  const btn=e.target.closest("button[data-act]"); if(!btn) return;
+  const id=e.target.closest(".list-item").dataset.part;
+  const p=partById(id);
+  if(btn.dataset.act==="edit-part") openPartModal(p);
+  if(btn.dataset.act==="dup-part"){
+    const copy=JSON.parse(JSON.stringify(p)); copy.id=uid("p"); copy.name=p.name+" 副本";
+    S.parts.push(copy); save(); renderAll(); toast("已复制板件");
+  }
+  if(btn.dataset.act==="del-part"){
+    if(!confirm(`删除板件「${p.name}」？两个方案中已排的位置也会移除。`)) return;
+    Object.values(S.plans).forEach(pl=>pl.boards.forEach(b=>b.items=b.items.filter(it=>it.partId!==id)));
+    S.parts=S.parts.filter(x=>x.id!==id);
+    save(); renderAll(); toast("已删除");
+  }
+});
+
+/* ============================================================
+   侧栏：板材 / 余料列表
+   ============================================================ */
+function renderStock(){
+  let html="";
+  S.stocks.forEach(st=>{
+    html += `<div class="list-item">
+      <div class="li-title">${esc(st.material)}
+        <span class="tag">${fmt(st.l)}×${fmt(st.w)}×${st.thick}</span>
+        <span class="pill tag">库存 ${st.qty}</span>
+      </div>
+      <div class="li-meta">
+        <span>${GRAIN_LABEL[st.grain]}</span>
+        ${st.batch?`<span class="tag batch">批 ${esc(st.batch)}</span>`:""}
+        ${st.price?`<span>${st.price} 元/张</span>`:""}
+      </div>
+      <div class="li-actions">
+        <button class="btn sm" data-act="edit" data-id="${st.id}">编辑</button>
+        <button class="btn sm danger" data-act="del" data-id="${st.id}">删除</button>
+      </div>
+    </div>`;
+  });
+  $("#stockList").innerHTML = html || `<div class="empty-tip">暂无板材规格</div>`;
+}
+$("#stockList").addEventListener("click",e=>{
+  const btn=e.target.closest("button[data-act]"); if(!btn) return;
+  const st=stockById(btn.dataset.id);
+  if(btn.dataset.act==="edit") openStockModal(st);
+  if(btn.dataset.act==="del"){
+    if(!confirm("删除该板材规格？已排出的板会标记来源缺失。")) return;
+    S.stocks=S.stocks.filter(x=>x.id!==st.id); save(); renderAll();
+  }
+});
+function renderRemnants(){
+  let html="";
+  if(!S.remnants.length){
+    html=`<div class="empty-tip">余料库为空。排完板后在板卡上点「收余料」把大块余料登记进来，后续板件会优先提示。</div>`;
+  }
+  S.remnants.forEach(r=>{
+    html += `<div class="list-item rem-card">
+      <div class="li-title">${esc(r.material)}
+        <span class="tag rem">余料 ${fmt(r.l)}×${fmt(r.w)}×${r.thick}</span>
+      </div>
+      <div class="li-meta">
+        <span>${GRAIN_LABEL[r.grain]}</span>
+        ${r.batch?`<span class="tag batch">批 ${esc(r.batch)}</span>`:""}
+        <span>面积 ${fmt(Math.round(r.l*r.w/100))} cm²</span>
+        ${r.note?`<span>${esc(r.note)}</span>`:""}
+      </div>
+      <div class="li-actions">
+        <button class="btn sm" data-act="edit" data-id="${r.id}">编辑</button>
+        <button class="btn sm danger" data-act="del" data-id="${r.id}">删除</button>
+      </div>
+    </div>`;
+  });
+  $("#remnantList").innerHTML=html;
+}
+$("#remnantList").addEventListener("click",e=>{
+  const btn=e.target.closest("button[data-act]"); if(!btn) return;
+  const r=remById(btn.dataset.id);
+  if(btn.dataset.act==="edit") openRemModal(r);
+  if(btn.dataset.act==="del"){
+    if(!confirm("删除该余料？")) return;
+    S.remnants=S.remnants.filter(x=>x.id!==r.id); save(); renderAll();
+  }
+});
+
+/* ============================================================
+   侧栏页签
+   ============================================================ */
+$("#sideTabs").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  $$("#sideTabs button").forEach(x=>x.classList.toggle("active",x===b));
+  $$(".aside .tabpane, aside .tabpane").forEach(x=>x.classList.remove("active"));
+  $("#tab-"+b.dataset.tab).classList.add("active");
+});
+/* ============================================================
+   弹窗通用
+   ============================================================ */
+function openModal(id){ $("#"+id).classList.add("show"); }
+function closeModals(){ $$(".modal-mask").forEach(m=>m.classList.remove("show")); }
+document.addEventListener("click",e=>{
+  if(e.target.classList?.contains("modal-mask")) e.target.classList.remove("show");
+  if(e.target.closest("[data-close]")) closeModals();
+});
+
+/* ---------- 板件弹窗 ---------- */
+function openPartModal(p){
+  refreshMaterialOptions();
+  $("#partModalTitle").textContent = p?"编辑板件":"新增板件";
+  $("#pfId").value = p?p.id:"";
+  $("#pfDelete").style.display = p?"block":"none";
+  const f = (k,d)=>p?(p[k]??d):d;
+  $("#pfName").value=f("name","");
+  $("#pfL").value=f("l",600); $("#pfW").value=f("w",400);
+  $("#pfQty").value=f("qty",1); $("#pfThick").value=f("thick",18);
+  $("#pfMaterial").value=f("material",S.materials[0]||"");
+  $("#pfBatch").value=f("batch","");
+  $("#pfGrain").value=f("grain","long");
+  $("#pfEdge").value=f("edge","0");
+  $("#pfNote").value=f("note","");
+  openModal("partModal");
+}
+$("#btnAddPart").onclick=()=>openPartModal(null);
+$("#pfMaterial").addEventListener("change",e=>{
+  if(e.target.value==="__new__"){
+    const name=prompt("新材质/颜色名称：");
+    if(name){ ensureMaterial(name); refreshMaterialOptions(); $("#pfMaterial").value=name; }
+    else { $("#pfMaterial").value=S.materials[0]||""; }
+  }
+});
+$("#pfSave").onclick=()=>{
+  const id=$("#pfId").value;
+  const p = id?partById(id):{id:uid("p")};
+  const name=$("#pfName").value.trim()||"未命名板件";
+  const l=+$("#pfL").value, w=+$("#pfW").value, qty=Math.max(1,+$("#pfQty").value||1), thick=+$("#pfThick").value;
+  if(!(l>0&&w>0&&thick>0)){ toast("长宽厚必须大于 0",true); return; }
+  const dimChanged = id && (p.l!==l || p.w!==w);
+  const qtyChanged = id && p.qty!==qty;
+  Object.assign(p,{name,l,w,qty,thick,
+    material:$("#pfMaterial").value, batch:$("#pfBatch").value.trim(),
+    grain:$("#pfGrain").value, edge:$("#pfEdge").value, note:$("#pfNote").value.trim()});
+  const isNew=!id;
+  if(isNew) S.parts.push(p);
+  // 尺寸/数量变化：清理非法摆放；设置自动重排时重排未锁定板
+  if(!isNew && (dimChanged||qtyChanged)){
+    handlePartChange(p, {dimChanged,qtyChanged});
+  }else if(isNew && S.settings.autoRecalc){
+    const saved=activePlan;
+    Object.keys(S.plans).forEach(k=>{activePlan=k;autoPack();});
+    activePlan=saved;
+  }
+  save(); closeModals(); renderAll();
+  toast(id?"已保存并重新校验":"已新增板件");
+};
+$("#pfDelete").onclick=()=>{
+  const id=$("#pfId").value; const p=partById(id);
+  if(!p) return;
+  if(!confirm(`删除「${p.name}」？`)) return;
+  Object.values(S.plans).forEach(pl=>pl.boards.forEach(b=>b.items=b.items.filter(it=>it.partId!==id)));
+  S.parts=S.parts.filter(x=>x.id!==id);
+  save(); closeModals(); renderAll(); toast("已删除");
+};
+/* 板件改动联动：锁定板上的冲突件标红保留；未锁定板重排。两个方案各自重算 */
+function handlePartChange(p, opt){
+  if(S.settings.autoRecalc && opt.dimChanged){
+    const savedPlan=activePlan;
+    Object.keys(S.plans).forEach(k=>{
+      activePlan=k;
+      S.plans[k].boards.forEach(b=>{ if(!b.locked) b.items=b.items.filter(it=>it.partId!==p.id); });
+      autoPack();
+    });
+    activePlan=savedPlan;
+  }else if(!S.settings.autoRecalc){
+    // 手动模式：数量减少时裁掉多余件
+    if(opt.qtyChanged){
+      Object.values(S.plans).forEach(pl=>{
+        let n=0;
+        pl.boards.forEach(b=>{ b.items=b.items.filter(it=>{
+          if(it.partId!==p.id) return true;
+          n++; return n<=p.qty;
+        })});
+      });
+    }
+  }
+}
+
+/* ---------- 板材弹窗 ---------- */
+function openStockModal(st){
+  refreshMaterialOptions();
+  $("#stockModalTitle").textContent=st?"编辑板材":"新增板材规格";
+  $("#sfId").value=st?st.id:"";
+  $("#sfDelete").style.display=st?"block":"none";
+  $("#sfMaterial").value=st?st.material:(S.materials[0]||"");
+  $("#sfL").value=st?st.l:2440; $("#sfW").value=st?st.w:1220;
+  $("#sfThick").value=st?st.thick:18; $("#sfQty").value=st?st.qty:10;
+  $("#sfBatch").value=st?st.batch||"":"";
+  $("#sfGrain").value=st?st.grain:"long";
+  $("#sfPrice").value=st?st.price||0:0;
+  openModal("stockModal");
+}
+$("#btnAddStock").onclick=()=>openStockModal(null);
+$("#sfSave").onclick=()=>{
+  const id=$("#sfId").value;
+  const st=id?stockById(id):{id:uid("s")};
+  const l=+$("#sfL").value,w=+$("#sfW").value,thick=+$("#sfThick").value;
+  if(!(l>0&&w>0&&thick>0)){toast("尺寸必须大于0",true);return;}
+  Object.assign(st,{material:$("#sfMaterial").value,l,w,thick,
+    qty:Math.max(0,+$("#sfQty").value||0),batch:$("#sfBatch").value.trim(),
+    grain:$("#sfGrain").value,price:+$("#sfPrice").value||0});
+  if(!id) S.stocks.push(st);
+  save(); closeModals(); renderAll(); toast("已保存");
+};
+$("#sfDelete").onclick=()=>{
+  const id=$("#sfId").value;
+  if(!confirm("删除该板材规格？")) return;
+  S.stocks=S.stocks.filter(x=>x.id!==id);
+  save(); closeModals(); renderAll();
+};
+
+/* ---------- 余料弹窗 ---------- */
+function openRemModal(r){
+  refreshMaterialOptions();
+  $("#remModalTitle").textContent=r?"编辑余料":"登记余料";
+  $("#rfId").value=r?r.id:"";
+  $("#rfDelete").style.display=r?"block":"none";
+  $("#rfMaterial").value=r?r.material:(S.materials[0]||"");
+  $("#rfL").value=r?r.l:500; $("#rfW").value=r?r.w:300;
+  $("#rfThick").value=r?r.thick:18; $("#rfBatch").value=r?r.batch||"":"";
+  $("#rfGrain").value=r?r.grain:"long";
+  openModal("remModal");
+}
+$("#btnAddRemnant").onclick=()=>openRemModal(null);
+$("#rfSave").onclick=()=>{
+  const id=$("#rfId").value;
+  const r=id?remById(id):{id:uid("r"),price:0};
+  const l=+$("#rfL").value,w=+$("#rfW").value,thick=+$("#rfThick").value;
+  if(!(l>0&&w>0&&thick>0)){toast("尺寸必须大于0",true);return;}
+  Object.assign(r,{material:$("#rfMaterial").value,l,w,thick,
+    batch:$("#rfBatch").value.trim(),grain:$("#rfGrain").value});
+  if(!id) S.remnants.push(r);
+  save(); closeModals(); renderAll(); toast("已保存");
+};
+$("#rfDelete").onclick=()=>{
+  const id=$("#rfId").value;
+  if(!confirm("删除该余料？")) return;
+  S.remnants=S.remnants.filter(x=>x.id!==id);
+  save(); closeModals(); renderAll();
+};
+
+/* ---------- 设置 ---------- */
+function syncSettingsUI(){
+  $("#setKerf").value=S.settings.kerf;
+  $("#setMinRem").value=S.settings.minRem;
+  $("#setGrain").value=S.settings.defaultGrain;
+  $("#setStrategy").value=S.settings.strategy;
+  $("#setAutoRecalc").checked=!!S.settings.autoRecalc;
+}
+["setKerf","setMinRem"].forEach(id=>$("#"+id).addEventListener("change",()=>{
+  S.settings.kerf=Math.max(0,+$("#setKerf").value||0);
+  S.settings.minRem=Math.max(0,+$("#setMinRem").value||0);
+  save(); renderAll();
+}));
+$("#setStrategy").onchange=e=>{S.settings.strategy=e.target.value;save();};
+$("#setAutoRecalc").onchange=e=>{S.settings.autoRecalc=e.target.checked;save();};
+$("#setGrain").onchange=e=>{S.settings.defaultGrain=e.target.value;save();};
+
+/* ---------- 数据导入导出 ---------- */
+$("#btnExportJson").onclick=()=>{
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="开料排版数据.json"; a.click();
+  URL.revokeObjectURL(a.href);
+};
+$("#btnImportJson").onclick=()=>$("#importFile").click();
+$("#importFile").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const d=JSON.parse(rd.result);
+      if(!d.parts||!d.stocks||!d.plans) throw new Error("格式不对");
+      if(!confirm("导入将覆盖当前全部数据，确定？")) return;
+      S=d; save(); renderAll(); toast("导入成功");
+    }catch(err){ toast("导入失败："+err.message,true); }
+  };
+  rd.readAsText(f); e.target.value="";
+});
+/* ============================================================
+   画布：渲染每张板（SVG）
+   ============================================================ */
+let selectedKey = null; // boardId + "|" + itemUid
+const MAX_STAGE_W = 600;
+function scaleFor(src){ return Math.min(1, MAX_STAGE_W/src.l); }
+
+function renderBoards(){
+  const plan=getPlan();
+  const valid=planValidation(activePlan);
+  const issueMap = new Map();
+  valid.boardIssues.forEach(({board,issues})=>issueMap.set(board.id,issues));
+  const wrap=$("#boardsWrap"); wrap.innerHTML="";
+  $("#emptyTip").style.display = plan.boards.length?"none":"block";
+
+  plan.boards.forEach((b,idx)=>{
+    const src=boardSource(b);
+    const card=document.createElement("div");
+    card.className="board-card"+(b.locked?" locked":"");
+    card.dataset.board=b.id;
+    if(!src){
+      card.innerHTML=`<div class="bc-head"><b>第 ${idx+1} 张板</b>
+        <span class="pill" style="background:#fef2f2;color:#b91c1c">板材来源已删除</span>
+        <span class="spacer"></span>
+        <button class="btn sm" data-act="remove-board">移除板</button></div>`;
+      wrap.appendChild(card);
+      card.querySelector("[data-act=remove-board]").onclick=()=>{
+        if(confirm("移除这张板？板件回到待排区。")){
+          plan.boards=plan.boards.filter(x=>x.id!==b.id); save(); renderAll();
+        }
+      };
+      return;
+    }
+    const st=boardStats(b);
+    const issues=(issueMap.get(b.id)||[]).filter(x=>x.msg!=="__MARK__");
+    const ratioPct=(st.ratio*100).toFixed(1);
+    const biggestOff = !b.locked ? computeOffcuts(b,S.settings.kerf,S.settings.minRem)[0] : null;
+    card.innerHTML=`
+      <div class="bc-head">
+        <div style="min-width:0">
+          <div class="bname">第 ${idx+1} 张板
+            ${b.sourceType==="remnant"?`<span class="tag rem">余料</span>`:`<span class="tag">整板</span>`}
+            ${b.locked?`<span class="pill lock-badge">🔒 已锁定</span>`:""}
+          </div>
+          <div class="bspec">${fmt(src.l)}×${fmt(src.w)}×${src.thick} · ${esc(src.material)}
+            ${src.batch?`· <span class="tag batch">批 ${esc(src.batch)}</span>`:""}
+            · 纹路${GRAIN_LABEL[src.grain]}</div>
+        </div>
+        <span class="spacer"></span>
+        <div class="bc-actions no-print row">
+          <button class="btn sm" data-act="lock">${b.locked?"解锁":"锁定"}</button>
+          <button class="btn sm" data-act="offcut" ${b.locked?"disabled":""}>收余料</button>
+          <button class="btn sm" data-act="clear" ${b.locked?"disabled":""}>清空</button>
+          <button class="btn sm danger" data-act="remove-board">删板</button>
+        </div>
+      </div>
+      <div class="bc-stat">
+        <span>件数 <b>${b.items.length}</b></span>
+        <span>利用率 <b>${ratioPct}%</b></span>
+        <span>余料面积 <b>${fmt(Math.round(st.offcuts.reduce((a,o)=>a+o.area,0)))} mm²</b></span>
+        ${biggestOff?`<span>最大余块 <b>${fmt(biggestOff.l)}×${fmt(biggestOff.w)}</b></span>`:""}
+      </div>
+      <div class="util-bar ${st.ratio<0.4?"warn":""}"><i style="width:${clamp(st.ratio*100,0,100)}%"></i></div>
+      <div class="board-stage"></div>
+      <div class="bc-issue ${issues.length?"show":""}">
+        ⚠ ${issues.length} 个问题${issues.slice(0,4).map(x=>`<span class="one">· ${esc(x.msg)}</span>`).join("")}
+        ${issues.length>4?`<span class="one">…另有 ${issues.length-4} 个</span>`:""}
+      </div>`;
+    const stage=card.querySelector(".stage, .board-stage");
+    stage.appendChild(buildBoardSvg(b,src,valid));
+    wrap.appendChild(card);
+
+    card.querySelector('[data-act=lock]').onclick=()=>{
+      b.locked=!b.locked;
+      if(b.locked) selectedKey=null;
+      save(); renderAll(); toast(b.locked?"已锁定，后续重排不会动它":"已解锁");
+    };
+    card.querySelector('[data-act=clear]').onclick=()=>{
+      if(b.locked) return;
+      if(confirm("清空该板？板件全部回到待排区（不自动重排）。")){
+        b.items=[]; save(); renderAll();
+      }
+    };
+    card.querySelector('[data-act=remove-board]').onclick=()=>{
+      if(confirm("删除这张板？已排板件回到待排区。")){
+        plan.boards=plan.boards.filter(x=>x.id!==b.id); save(); renderAll();
+      }
+    };
+    card.querySelector('[data-act=offcut]').onclick=()=>openSaveRemnants(b);
+  });
+}
+
+function partColor(p){
+  if(!p) return "#cbd5e1";
+  return {long:"#dbeafe", cross:"#cffafe", none:"#f1f5f9", fixed:"#fee2e2"}[p.grain]||"#e2e8f0";
+}
+function partStroke(p){
+  return {long:"#3b82f6", cross:"#0891b2", none:"#94a3b8", fixed:"#dc2626"}[p.grain]||"#64748b";
+}
+function buildBoardSvg(board, src, valid){
+  const scale=scaleFor(src);
+  const W=src.l*scale, H=src.w*scale;
+  const NS="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(NS,"svg");
+  svg.setAttribute("class","board-svg"+(board.locked?"":" rotatable"));
+  svg.setAttribute("width",Math.round(W)); svg.setAttribute("height",Math.round(H));
+  svg.dataset.board=board.id;
+  const kerf=S.settings.kerf||0;
+  const defs=document.createElementNS(NS,"defs");
+  svg.appendChild(defs);
+
+  // 纹理方向背景线
+  const bg=document.createElementNS(NS,"rect");
+  bg.setAttribute("x",0);bg.setAttribute("y",0);
+  bg.setAttribute("width",src.l);bg.setAttribute("height",src.w);
+  bg.setAttribute("fill","#f8fafc");
+  svg.appendChild(bg);
+  if(src.grain!=="none"){
+    const pat=document.createElementNS(NS,"pattern");
+    pat.setAttribute("id","grain_"+board.id);
+    pat.setAttribute("width", src.grain==="long"?40:8);
+    pat.setAttribute("height", src.grain==="long"?8:40);
+    pat.setAttribute("patternUnits","userSpaceOnUse");
+    const ln=document.createElementNS(NS,"line");
+    if(src.grain==="long"){ln.setAttribute("x1",0);ln.setAttribute("y1",4);ln.setAttribute("x2",40);ln.setAttribute("y2",4);}
+    else {ln.setAttribute("x1",4);ln.setAttribute("y1",0);ln.setAttribute("x2",4);ln.setAttribute("y2",40);}
+    ln.setAttribute("stroke","#e2e8f0");ln.setAttribute("stroke-width",1);
+    pat.appendChild(ln); svg.appendChild(pat);
+    const fo=document.createElementNS(NS,"rect");
+    fo.setAttribute("x",0);fo.setAttribute("y",0);fo.setAttribute("width",src.l);fo.setAttribute("height",src.w);
+    fo.setAttribute("fill","url(#grain_"+board.id+")");
+    svg.appendChild(fo);
+  }
+
+  // 余料轮廓（浅色描边）
+  if(!board.locked){
+    computeOffcuts(board,kerf,S.settings.minRem).slice(0,3).forEach(o=>{
+      const r=document.createElementNS(NS,"rect");
+      r.setAttribute("x",o.x);r.setAttribute("y",o.y);
+      r.setAttribute("width",o.l);r.setAttribute("height",o.w);
+      r.setAttribute("fill","rgba(245,158,11,.06)");
+      r.setAttribute("stroke","#fbbf24");r.setAttribute("stroke-width",1.5);
+      r.setAttribute("stroke-dasharray","10,6");
+      svg.appendChild(r);
+      const t=document.createElementNS(NS,"text");
+      t.setAttribute("x",o.x+6);t.setAttribute("y",o.y+16);
+      t.setAttribute("class","ghost-text");
+      t.textContent=`余 ${Math.round(o.l)}×${Math.round(o.w)}`;
+      svg.appendChild(t);
+    });
+  }
+
+  // 板边框
+  const border=document.createElementNS(NS,"rect");
+  border.setAttribute("x",.75);border.setAttribute("y",.75);
+  border.setAttribute("width",src.l-1.5);border.setAttribute("height",src.w-1.5);
+  border.setAttribute("fill","none");border.setAttribute("stroke","#94a3b8");border.setAttribute("stroke-width",1.5);
+  svg.appendChild(border);
+
+  // 板件
+  board.items.forEach(it=>{
+    const p=partById(it.partId);
+    const w=it.rot?p.w:p.l, h=it.rot?p.l:p.w;
+    const g=document.createElementNS(NS,"g");
+    g.dataset.key=board.id+"|"+it.uid;
+    if(!board.locked) g.style.cursor="grab";
+    const clipId="clip_"+it.uid;
+    const cp=document.createElementNS(NS,"clipPath");
+    cp.setAttribute("id",clipId);
+    const cpr=document.createElementNS(NS,"rect");
+    cpr.setAttribute("x",it.x);cpr.setAttribute("y",it.y);
+    cpr.setAttribute("width",w);cpr.setAttribute("height",h);
+    cp.appendChild(cpr); defs.appendChild(cp);
+    const r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",it.x);r.setAttribute("y",it.y);
+    r.setAttribute("width",w);r.setAttribute("height",h);
+    r.setAttribute("rx",3);
+    const bad=valid.badUids.has(it.uid);
+    r.setAttribute("fill",partColor(p));
+    r.setAttribute("stroke",bad?"#dc2626":partStroke(p));
+    r.setAttribute("stroke-width",bad?3:1.5);
+    r.setAttribute("class","part-rect"+(selectedKey===board.id+"|"+it.uid?" selected":""));
+    g.appendChild(r);
+
+    // 封边粗线：长边=L 方向；不旋转时长边沿 x
+    if(p && p.edge!=="0"){
+      const edges=[];
+      if(p.edge==="2long"||p.edge==="4"){
+        // 两条长边（沿 L）
+        if(!it.rot){ edges.push([0,0,w,0],[0,h,w,h]); }
+        else { edges.push([0,0,0,h],[w,0,w,h]); }
+      }
+      if(p.edge==="2short"||p.edge==="4"){
+        if(!it.rot){ edges.push([0,0,0,h],[w,0,w,h]); }
+        else { edges.push([0,0,w,0],[0,h,w,h]); }
+      }
+      edges.slice(0,4).forEach(dd=>{
+        const ln=document.createElementNS(NS,"line");
+        ln.setAttribute("x1",dd[0]+1);ln.setAttribute("y1",dd[1]+1);
+        ln.setAttribute("x2",dd[2]-1);ln.setAttribute("y2",dd[3]-1);
+        ln.setAttribute("class","bedge");
+        g.appendChild(ln);
+      });
+    }
+
+    // 文字（板坐标 -> 缩放显示，字号按板坐标写），超出板件部分裁掉
+    if(p){
+      const textG=document.createElementNS(NS,"g");
+      textG.setAttribute("clip-path","url(#"+clipId+")");
+      g.appendChild(textG);
+      const fs=Math.min(26, clamp(Math.min(w,h)*0.16, 11, 26))/scale;
+      const label=document.createElementNS(NS,"text");
+      label.setAttribute("x",it.x+6/scale); label.setAttribute("y",it.y+20/scale);
+      label.setAttribute("class","part-label");
+      label.setAttribute("font-size",fs);
+      label.textContent=p.name.length>10?p.name.slice(0,10)+"…":p.name;
+      textG.appendChild(label);
+      const dim=document.createElementNS(NS,"text");
+      dim.setAttribute("x",it.x+6/scale); dim.setAttribute("y",it.y+20/scale+fs+2);
+      dim.setAttribute("class","part-dim"); dim.setAttribute("font-size",fs*.72);
+      dim.textContent=`${Math.round(p.l)}×${Math.round(p.w)}${it.rot?" ⟳":""}`;
+      textG.appendChild(dim);
+    }
+    svg.appendChild(g);
+  });
+
+  // 尺寸标注
+  const lbl=document.createElementNS(NS,"text");
+  lbl.setAttribute("x",src.l-8);lbl.setAttribute("y",src.w-8);
+  lbl.setAttribute("text-anchor","end");lbl.setAttribute("class","ghost-text");
+  lbl.setAttribute("font-size",24/scale);
+  lbl.textContent=`${src.l} × ${src.w} mm`;
+  svg.appendChild(lbl);
+  const glbl=document.createElementNS(NS,"text");
+  glbl.setAttribute("x",8);glbl.setAttribute("y",24/scale+4);
+  glbl.setAttribute("class","ghost-text");glbl.setAttribute("font-size",22/scale);
+  glbl.textContent = src.grain==="none"?"素板（无纹路）":("纹理→"+(src.grain==="long"?"长向":"短向"));
+  svg.appendChild(glbl);
+
+  attachBoardDrag(svg, board, scale);
+  return svg;
+}
+/* ============================================================
+   拖拽：托盘 → 板；板内/跨板移动；点击旋转
+   ============================================================ */
+const SNAP = 5;
+let drag = null;
+/* 拖入载荷：{kind:"new", partId, rot} 或 {kind:"move", fromBoard, uid, partId, rot} */
+
+function svgPoint(svg, clientX, clientY){
+  const rect=svg.getBoundingClientRect();
+  // svg 用 viewBox=板尺寸 时坐标直接对应毫米
+  const vb = svg.viewBox.baseVal;
+  return {
+    x: (clientX-rect.left)/rect.width*vb.width,
+    y: (clientY-rect.top)/rect.height*vb.height
+  };
+}
+function nearestSnap(v, max, step){
+  const cands=[0, v, max];
+  // 吸附到 0 / 边界 / 5mm 网格
+  let best=Math.round(v/step)*step;
+  cands.push(best);
+  cands.sort((a,b)=>Math.abs(a-v)-Math.abs(b-v));
+  return clamp(cands[0],0,max);
+}
+
+function showGhost(text,x,y){
+  const g=$("#dragGhost"); g.style.display="block";
+  g.querySelector(".gtxt").textContent=text;
+  g.style.left=(x+12)+"px"; g.style.top=(y+12)+"px";
+}
+function hideGhost(){ $("#dragGhost").style.display="none"; }
+function boardSvgAt(x,y){
+  const el=document.elementFromPoint(x,y);
+  return el?el.closest(".board-svg"):null;
+}
+
+/* 托盘 chip 拖拽 */
+function makeChipDraggable(chip, partId){
+  chip.addEventListener("pointerdown",e=>{
+    if(e.button!==0) return;
+    e.preventDefault();
+    let rot=false;
+    const start=(ev)=>{
+      const p=partById(partId);
+      drag={kind:"new",partId,rot,startX:ev.clientX,startY:ev.clientY,moved:false};
+      showGhost(`${p.name} ${p.l}×${p.w}`,ev.clientX,ev.clientY);
+    };
+    chip.setPointerCapture(e.pointerId);
+    const mv=ev=>{
+      if(!drag){
+        if(Math.abs(ev.clientX-e.clientX)+Math.abs(ev.clientY-e.clientY)>6) start(ev);
+      }else{
+        drag.moved=true;
+        const p=partById(partId);
+        showGhost(`${p.name} ${p.l}×${p.w}${drag.rot?" ⟳":""}`,ev.clientX,ev.clientY);
+      }
+    };
+    chip.addEventListener("pointermove",mv);
+    chip.addEventListener("pointerup",ev=>{
+      try{ chip.releasePointerCapture(e.pointerId); }catch(_){}
+      chip.removeEventListener("pointermove",mv);
+      if(drag && drag.moved){
+        hideGhost();
+        finishDrop(ev.clientX,ev.clientY);
+      }else{
+        // 点击：旋转方向标记（再次拖出时带旋转）
+        const p=partById(partId);
+        if(p.grain==="fixed"){ toast("该板件禁止旋转",true); }
+        else if(p.grain==="none"){
+          rot=!rot; chip.classList.toggle("rotated",rot);
+          const sp=chip.querySelector(".rotstate");
+          if(sp) sp.textContent=rot?"⟳90°":"";
+        }else{
+          // 有纹路件：只在合法的两个朝向间切（若两个方向都合法）
+          const src0=S.stocks[0];
+          toast("有纹路要求的板件会按纹路自动定朝向，拖到板上即可；如需调整请放好后点板件切换");
+        }
+      }
+      hideGhost(); drag=null;
+    },{once:true});
+  });
+}
+
+/* 板上板件拖拽 */
+function attachBoardDrag(svg, board, scale){
+  svg.setAttribute("viewBox",`0 0 ${boardSource(board).l} ${boardSource(board).w}`);
+  svg.addEventListener("pointerdown",e=>{
+    const g=e.target.closest("g[data-key]");
+    if(board.locked){ selectedKey=null; return; }
+    if(!g) { selectedKey=null; renderBoards(); return; }
+    const key=g.dataset.key;
+    const uid=key.split("|")[1];
+    const item=board.items.find(it=>it.uid===uid);
+    if(!item) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const downX=e.clientX, downY=e.clientY;
+    const startX=item.x, startY=item.y;
+    let moved=false;
+    selectedKey=key;
+    svg.setPointerCapture(e.pointerId);
+    const move=ev=>{
+      if(Math.abs(ev.clientX-downX)+Math.abs(ev.clientY-downY)>5){
+        if(!moved){
+          moved=true;
+          drag={kind:"move",fromBoard:board.id,uid,partId:item.partId,rot:item.rot,moved:false};
+        }
+        drag.moved=true;
+      }
+      if(drag && drag.kind==="move"){
+        const target=boardSvgAt(ev.clientX,ev.clientY);
+        const p=partById(item.partId);
+        $$(".board-svg").forEach(s=>s.classList.remove("drop-hint"));
+        if(target) target.classList.add("drop-hint");
+        showGhost(`${p.name} ${p.l}×${p.w}${drag.rot!==item.rot?" ⟳":""}`,ev.clientX,ev.clientY);
+      }
+    };
+    const up=ev=>{
+      try{ svg.releasePointerCapture(e.pointerId); }catch(_){}
+      svg.removeEventListener("pointermove",move);
+      if(drag && moved){
+        hideGhost();
+        finishDrop(ev.clientX,ev.clientY);
+      }else{
+        // 点击：旋转该件（若在当前板上合法）
+        tryRotateItem(board,item);
+        renderBoards();
+      }
+      $$(".board-svg").forEach(s=>s.classList.remove("drop-hint"));
+      hideGhost(); drag=null;
+    };
+    svg.addEventListener("pointermove",move);
+    svg.addEventListener("pointerup",up,{once:true});
+  });
+}
+
+function tryRotateItem(board,item){
+  const src=boardSource(board);
+  const p=partById(item.partId);
+  if(p.grain==="fixed"){ toast("禁转板件，不能旋转",true); return; }
+  const wantRot=!item.rot;
+  const ok=allowedSlots(p,src,0).some(s=>s.rot===wantRot);
+  if(!ok){ toast(`这个朝向不符合纹路要求（板${GRAIN_LABEL[src.grain]} / 件${GRAIN_LABEL[p.grain]}）`,true); return; }
+  item.rot=wantRot;
+  // 旋转后若越界，拉回板内
+  const w=item.rot?p.w:p.l, h=item.rot?p.l:p.w;
+  item.x=clamp(item.x,0,Math.max(0,src.l-w));
+  item.y=clamp(item.y,0,Math.max(0,src.w-h));
+  save();
+}
+
+function finishDrop(clientX,clientY){
+  let svg=boardSvgAt(clientX,clientY);
+  if(!svg && drag){
+    // 兜底：隐藏可能拦截命中的浮层再找
+    const ghost=$("#dragGhost"); const oldDisp=ghost.style.display; ghost.style.display="none";
+    svg=boardSvgAt(clientX,clientY);
+    ghost.style.display=oldDisp;
+  }
+  if(!svg){ toast("要拖到某张板上才行",true); return; }
+  const boardId=svg.dataset.board;
+  const plan=getPlan();
+  const board=plan.boards.find(b=>b.id===boardId);
+  if(!board) return;
+  if(board.locked){ toast("该板已锁定，不能放入或移动",true); return; }
+  const src=boardSource(board);
+  const p=partById(drag.partId);
+  if(!p) return;
+  // 校验批次/材质
+  if(!partFitsSource(p,src)){
+    toast(`放不了：材质/厚度/批次不一致（件 ${p.material} ${p.thick}mm 批${p.batch||"—"} vs 板 ${src.material} ${src.thick}mm 批${src.batch||"—"}）`,true);
+    return;
+  }
+  // 决定朝向：默认在该板上取合法槽位的最优（贴左下），拖动 new 时尊重 chip 的 rot（仅无纹路）
+  let slots=allowedSlots(p,src,S.settings.kerf);
+  if(!slots.length){
+    toast("板件比板还大或纹路方向放不下",true); return;
+  }
+  let rot;
+  if(drag.kind==="move") rot=drag.rot;
+  else rot=(drag.rot && slots.some(s=>s.rot))?true:slots[0].rot;
+  if(!slots.some(s=>s.rot===rot)) rot=slots[0].rot;
+
+  const pt=svgPoint(svg,clientX,clientY);
+  const w=(rot?p.w:p.l), h=(rot?p.l:p.w);
+  let x=nearestSnap(pt.x-w/2, src.l-w-S.settings.kerf, SNAP);
+  let y=nearestSnap(pt.y-h/2, src.w-h-S.settings.kerf, SNAP);
+  x=Math.max(0,x); y=Math.max(0,y);
+
+  // 移动：从原板摘除
+  let item;
+  if(drag.kind==="move"){
+    const from=plan.boards.find(b=>b.id===drag.fromBoard);
+    if(!from) return;
+    item=from.items.find(it=>it.uid===drag.uid);
+    if(!item) return;
+    from.items=from.items.filter(it=>it.uid!==item.uid);
+    item.rot=rot; item.x=round1(x); item.y=round1(y);
+  }else{
+    // 数量检查
+    const c=placedCount(activePlan)[p.id]||0;
+    if(c>=p.qty){ toast(`「${p.name}」${p.qty} 件已全部排完，不能再加；可在板件列表改数量`,true); return; }
+    item={uid:uid("it"),partId:p.id,x:round1(x),y:round1(y),rot};
+  }
+  board.items.push(item);
+  selectedKey=board.id+"|"+item.uid;
+  // 即时校验，重叠给提示（不阻止，让用户看到红框）
+  save(); renderAll();
+  requestAnimationFrame(()=>{
+    const iss=validateBoard(board).filter(x=>x.msg!=="__MARK__");
+    if(iss.length) toast(`已放下，但有 ${iss.length} 处问题（红框标出）`,true);
+    else toast("已放置");
+  });
+}
+
+/* ============================================================
+   待排托盘
+   ============================================================ */
+function renderTray(){
+  const c=placedCount(activePlan);
+  const chips=$("#trayChips"); chips.innerHTML="";
+  let any=false;
+  S.parts.forEach(p=>{
+    const n=p.qty-(c[p.id]||0);
+    for(let i=0;i<n;i++){
+      any=true;
+      const chip=document.createElement("div");
+      chip.className="chip";
+      const rem=suggestRemnants(p);
+      if(rem.length) chip.classList.add("rem-cand");
+      chip.innerHTML=`<span class="${grainDotClass(p.grain)}"></span>
+        <span>${esc(p.name)}</span>
+        <span class="muted">${p.l}×${p.w}</span>
+        <span class="rotstate"></span>
+        <span class="qty">×${n}</span>`;
+      chips.appendChild(chip);
+      makeChipDraggable(chip,p.id);
+      break; // 同一种只放一个 chip，qty 角标显示数量
+    }
+  });
+  if(!any) chips.innerHTML=`<span class="muted">全部板件已排完 ✅</span>`;
+  const total=S.parts.reduce((a,p)=>a+p.qty,0);
+  const done=S.parts.reduce((a,p)=>a+Math.min(p.qty,c[p.id]||0),0);
+  $("#trayHint").textContent = total-done?`还差 ${total-done} 件`:"";
+}
+/* ============================================================
+   手动加板
+   ============================================================ */
+$("#btnAddBoard").onclick=()=>{
+  // 列出可用整板（库存>已用）与全部余料；按“当前方案已占用”记账
+  const st=planStats(activePlan);
+  let html="";
+  S.remnants.forEach(r=>{
+    const usedHere=(st.remCount[r.id]||0);
+    if(usedHere>=1) return;
+    html+=`<div class="list-item rem-card">
+      <div class="li-title">余料 ${esc(r.material)} <span class="tag rem">${fmt(r.l)}×${fmt(r.w)}×${r.thick}</span></div>
+      <div class="li-meta"><span>${GRAIN_LABEL[r.grain]}</span>${r.batch?`<span class="tag batch">批 ${esc(r.batch)}</span>`:""}</div>
+      <div class="li-actions"><button class="btn primary sm" data-type="remnant" data-id="${r.id}">用这块</button></div>
+    </div>`;
+  });
+  S.stocks.forEach(s=>{
+    const usedHere=st.stockCount[s.id]||0;
+    if(usedHere>=s.qty) return;
+    html+=`<div class="list-item">
+      <div class="li-title">${esc(s.material)} <span class="tag">${fmt(s.l)}×${fmt(s.w)}×${s.thick}</span>
+        <span class="pill tag">余 ${s.qty-usedHere} 张</span></div>
+      <div class="li-meta"><span>${GRAIN_LABEL[s.grain]}</span>${s.batch?`<span class="tag batch">批 ${esc(s.batch)}</span>`:""}</div>
+      <div class="li-actions"><button class="btn primary sm" data-type="stock" data-id="${s.id}">加一张</button></div>
+    </div>`;
+  });
+  $("#boardPickList").innerHTML=html||`<div class="empty-tip">库存不足，请先在「板材」页增加规格或张数</div>`;
+  openModal("boardModal");
+};
+$("#boardPickList").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-type]"); if(!b) return;
+  const board={id:uid("b"),sourceId:b.dataset.id,
+    sourceType:b.dataset.type,items:[],locked:false,savedRemnants:[]};
+  getPlan().boards.push(board);
+  save(); closeModals(); renderAll();
+  toast("已加板，把下方待排件拖上去");
+});
+
+/* ============================================================
+   收余料
+   ============================================================ */
+let saveRemCtx=null;
+function openSaveRemnants(board){
+  saveRemCtx=board;
+  const offs=computeOffcuts(board,S.settings.kerf,S.settings.minRem).slice(0,4);
+  if(!offs.length){ toast("没有达到最小宽度的整块余料（小碎料不建议留）",true); return; }
+  const already=new Set((board.savedRemnants||[]).map(r=>r.id));
+  $("#saveRemList").innerHTML=offs.map((o,i)=>`
+    <label class="list-item" style="display:flex;gap:8px;align-items:center">
+      <input type="checkbox" data-i="${i}" ${i===0?"checked":""}>
+      <span class="tag rem">余块 ${i+1}</span>
+      <input type="number" data-k="l" data-i="${i}" value="${Math.round(o.l)}" style="width:90px"> ×
+      <input type="number" data-k="w" data-i="${i}" value="${Math.round(o.w)}" style="width:90px"> mm
+      <span class="muted">位置 (${Math.round(o.x)},${Math.round(o.y)})，约 ${fmt(Math.round(o.l*o.w/100))} cm²</span>
+    </label>`).join("");
+  openModal("saveRemModal");
+}
+$("#saveRemConfirm").onclick=()=>{
+  const picks=[];
+  $$("#saveRemList label").forEach(lab=>{
+    const i=lab.querySelector("input[type=checkbox]").dataset.i;
+    picks.push({
+      keep:lab.querySelector("input[type=checkbox]").checked,
+      l:+lab.querySelector('[data-k=l]').value,
+      w:+lab.querySelector('[data-k=w]').value
+    });
+  });
+  if(!picks.some(x=>x.keep)){ toast("至少勾选一块",true); return; }
+  saveRemnantsFromBoard(saveRemCtx.id,picks);
+  save(); closeModals(); renderAll(); toast("已收入余料库，后续订单优先提示");
+};
+
+/* ============================================================
+   方案对比
+   ============================================================ */
+function planCard(title, st, win, locked){
+  const rows=[];
+  const push=(k,v,cls)=>rows.push(`<div class="cmp-row ${cls||""}"><span>${k}</span><span>${v}</span></div>`);
+  push("板张数", st.boards, win.boards?"good":"");
+  push("板件完成度", `${st.placedN}/${st.totalN}`);
+  push("问题板数", st.issueBoards, st.issueBoards?"bad":"");
+  push("综合利用率", (st.ratio*100).toFixed(1)+"%", win.ratio?"good":"");
+  push("余料面积", fmt(Math.round(st.remArea))+" mm²（"+(st.remRatio*100).toFixed(1)+"%）", win.rem?"good":"");
+  push("板材成本", st.cost?st.cost+" 元":"—", win.cost?"good":"");
+  // 板材明细
+  const det=[];
+  Object.entries(st.stockCount).forEach(([id,n])=>{const s=stockById(id);if(s)det.push(`${s.l}×${s.w} ×${n}`);});
+  Object.entries(st.remCount).forEach(([id,n])=>{const r=remById(id);if(r)det.push(`余料${r.l}×${r.w} ×${n}`);});
+  push("用料明细", det.join("、")||"空");
+  return `<div class="cmp-card ${win.any?"win":""}">
+    <h3>${title} ${win.any?'<span class="pill win-tag">综合更优</span>':""}</h3>${rows.join("")}</div>`;
+}
+$("#btnCompare").onclick=()=>{
+  const {a,b,aWin,bWin}=comparePlans();
+  $("#cmpGrid").innerHTML =
+    planCard("方案 A", a, {any:aWin, boards:a.boards<b.boards, ratio:a.ratio>b.ratio,
+      rem:a.remRatio>b.remRatio, cost:a.cost<b.cost}) +
+    planCard("方案 B", b, {any:bWin, boards:b.boards<a.boards, ratio:b.ratio>a.ratio,
+      rem:b.remRatio>a.remRatio, cost:b.cost<a.cost});
+  openModal("compareModal");
+};
+
+/* ============================================================
+   导出 / 打印 / 重排 / 方案切换
+   ============================================================ */
+$("#btnExport").onclick=()=>{
+  const st=planStats(activePlan);
+  if(st.placedN===0){ toast("当前方案还没有排布，先排一版",true); return; }
+  const csv="﻿"+buildCSV();
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`开料单_方案${activePlan}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("开料单已导出（CSV，可用 Excel 打开）");
+};
+$("#btnPrint").onclick=()=>window.print();
+$("#btnAuto").onclick=()=>{
+  const lockedN=getPlan().boards.filter(b=>b.locked).length;
+  const {unplaced}=autoPack();
+  save(); renderAll();
+  toast(`自动排版完成${lockedN?`，${lockedN} 张锁定板未动`:""}${unplaced.length?`，${unplaced.length} 件放不下（见待排区）`:""}`);
+};
+$("#btnClearLayout").onclick=()=>{
+  if(!confirm("清空当前方案所有板（锁定板也一起删）？板件全部回到待排区。")) return;
+  getPlan().boards=[]; selectedKey=null; save(); renderAll();
+};
+$("#planSeg").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  activePlan=b.dataset.plan;
+  S.plans.A.active=activePlan==="A"; S.plans.B.active=activePlan==="B";
+  $$("#planSeg button").forEach(x=>x.classList.toggle("active",x===b));
+  selectedKey=null; save(); renderAll();
+});
+$("#btnReset").onclick=()=>{
+  if(!confirm("清空当前浏览器里的全部数据并恢复示例？")) return;
+  localStorage.removeItem(LS_KEY);
+  boot(true);
+};
+
+/* ============================================================
+   渲染入口 / 启动
+   ============================================================ */
+function renderStats(){
+  const st=planStats(activePlan);
+  $("#statLine").innerHTML=`
+    <span class="stat">板张 <b>${st.boards}</b></span>
+    <span class="stat">完成 <b>${st.placedN}/${st.totalN}</b></span>
+    <span class="stat">利用率 <b>${(st.ratio*100).toFixed(1)}%</b></span>
+    <span class="stat">余料 <b>${(st.remRatio*100).toFixed(1)}%</b></span>
+    ${st.issueBoards?`<span class="stat" style="color:var(--bad)">问题板 <b>${st.issueBoards}</b></span>`:""}
+    ${st.cost?`<span class="stat">料钱 <b>${st.cost}</b>元</span>`:""}`;
+}
+function renderAll(){
+  renderParts(); renderStock(); renderRemnants();
+  renderBoards(); renderTray(); renderStats();
+  syncSettingsUI();
+}
+function boot(forceSample){
+  S = forceSample?null:load();
+  let firstRun=false;
+  if(!S){ S=seedData(); firstRun=true; }
+  if(!S.plans.B) S.plans.B={boards:[],active:false};
+  activePlan = S.plans.B.active?"B":"A";
+  $$("#planSeg button").forEach(x=>x.classList.toggle("active",x.dataset.plan===activePlan));
+  // 兼容：items uid
+  Object.values(S.plans).forEach(pl=>pl.boards.forEach(b=>(b.items||[]).forEach(it=>{
+    if(!it.uid) it.uid=uid("it");
+    if(!("locked" in b)) b.locked=false;
+  })));
+  if(firstRun) autoPack();
+  save();
+  renderAll();
+}
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){ selectedKey=null; closeModals(); renderBoards(); }
+});
+boot(false);
+/*__APP_JS__*/
+</script>
+</body>
+</html>
