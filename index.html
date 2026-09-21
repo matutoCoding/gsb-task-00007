@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>板材开料排版</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>板材开料排版</h1>
+      <p>纹路、批次、封边与余料一体校验</p>
+    </div>
+    <div class="header-actions">
+      <button class="button primary" id="autoLayoutBtn" type="button">自动排版</button>
+      <button class="button" id="exportBtn" type="button">导出开料单</button>
+      <button class="button ghost" id="resetBtn" type="button">重置样例</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <aside class="sidebar">
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="parts" type="button">板件</button>
+        <button class="tab" data-tab="sheets" type="button">板材/余料</button>
+        <button class="tab" data-tab="settings" type="button">方案与设置</button>
+      </nav>
+
+      <section class="tab-panel active" data-panel="parts">
+        <form id="partForm" class="editor-form">
+          <input type="hidden" name="id">
+          <div class="form-grid">
+            <label class="span-2">名称
+              <input name="name" required placeholder="如：柜门">
+            </label>
+            <label>宽 X
+              <input name="w" type="number" min="1" required>
+            </label>
+            <label>高 Y
+              <input name="h" type="number" min="1" required>
+            </label>
+            <label>数量
+              <input name="qty" type="number" min="1" value="1">
+            </label>
+            <label>纹路
+              <select name="grain">
+                <option value="vertical">顺纹</option>
+                <option value="horizontal">横纹</option>
+                <option value="any">不限</option>
+              </select>
+            </label>
+            <label class="span-2">颜色批次
+              <input name="batch" required list="batchList" placeholder="如：胡桃-A批">
+            </label>
+          </div>
+          <datalist id="batchList"></datalist>
+          <fieldset class="edge-fieldset">
+            <legend>封边</legend>
+            <label><input type="checkbox" name="edgeN"> 上</label>
+            <label><input type="checkbox" name="edgeE"> 右</label>
+            <label><input type="checkbox" name="edgeS"> 下</label>
+            <label><input type="checkbox" name="edgeW"> 左</label>
+          </fieldset>
+          <div class="form-actions">
+            <button class="button primary" type="submit" id="partSubmitBtn">添加板件</button>
+            <button class="button ghost" type="button" data-action="cancelPartEdit">取消编辑</button>
+          </div>
+        </form>
+        <div id="partsList" class="record-list"></div>
+      </section>
+
+      <section class="tab-panel" data-panel="sheets">
+        <form id="sheetForm" class="editor-form">
+          <input type="hidden" name="id">
+          <div class="form-grid">
+            <label class="span-2">板材名称
+              <input name="name" required placeholder="如：2440×1220 整板">
+            </label>
+            <label>宽 X
+              <input name="w" type="number" min="1" value="2440" required>
+            </label>
+            <label>高 Y
+              <input name="h" type="number" min="1" value="1220" required>
+            </label>
+            <label class="span-2">颜色批次
+              <input name="batch" required list="batchList" placeholder="必须与板件一致">
+            </label>
+            <label class="span-2">类型
+              <select name="kind">
+                <option value="full">整板</option>
+                <option value="remnant">余料</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button class="button primary" type="submit" id="sheetSubmitBtn">添加板材</button>
+            <button class="button ghost" type="button" data-action="cancelSheetEdit">取消编辑</button>
+          </div>
+        </form>
+        <div id="sheetsList" class="record-list"></div>
+      </section>
+
+      <section class="tab-panel" data-panel="settings">
+        <div class="settings-block">
+          <h2>当前订单</h2>
+          <label>订单号
+            <input id="orderNoInput" type="text">
+          </label>
+        </div>
+        <div class="settings-block">
+          <h2>排版参数</h2>
+          <label>锯缝 mm
+            <input id="kerfInput" type="number" min="0" step="1">
+          </label>
+          <label>吸附粒度 mm
+            <input id="snapInput" type="number" min="1" step="1">
+          </label>
+          <label>余料最小宽 mm
+            <input id="remnantWInput" type="number" min="1" step="1">
+          </label>
+          <label>余料最小高 mm
+            <input id="remnantHInput" type="number" min="1" step="1">
+          </label>
+          <label class="switch-row">
+            <input id="showRemnantsInput" type="checkbox">
+            显示可入库余料框
+          </label>
+          <label>显示比例
+            <input id="scaleInput" type="range" min="0.12" max="0.34" step="0.01">
+          </label>
+        </div>
+        <div class="settings-block">
+          <h2>方案</h2>
+          <div id="versionManager"></div>
+        </div>
+        <div class="settings-block">
+          <h2>本地数据</h2>
+          <p class="muted">数据保存在当前浏览器，不上传服务器。</p>
+          <button class="button danger" id="clearBtn" type="button">清空并重新开始</button>
+        </div>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div id="versionBar" class="version-bar"></div>
+      <div id="issueBanner" class="issue-banner"></div>
+      <div id="boards" class="boards"></div>
+      <div id="tray" class="tray"></div>
+    </section>
+
+    <aside class="inspector">
+      <section class="inspector-block">
+        <h2>检查结果</h2>
+        <div id="issueList"></div>
+      </section>
+      <section class="inspector-block">
+        <h2>选中对象</h2>
+        <div id="selectionPanel"></div>
+      </section>
+      <section class="inspector-block">
+        <h2>两版对比</h2>
+        <div id="comparePanel"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
